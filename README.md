@@ -15,6 +15,7 @@ system-reliability-engineering/
 │   ├── figures/                       # Generated plots, charts, and reliability diagrams
 │   └── presentation/                  # Presentation slides and visual deliverables
 ├── src/                               # Reusable Python routines and helper functions
+├── tests/                             # Automated test suite (pytest)
 ├── .gitignore                         # Git ignore configuration
 ├── LICENSE                            # Repository license
 ├── README.md                          # Project overview and setup instructions
@@ -68,3 +69,20 @@ jupyter notebook
 
 Open the desired notebook in the `notebooks/` directory and execute the cells sequentially.
 
+## Automated Testing
+
+The project includes an automated test suite implemented with `pytest` to verify mathematical formulations, numerical accuracy, and visual artifact generation against milestone acceptance criteria.
+
+### Running Tests
+
+Execute the complete test suite from the project root:
+
+```bash
+pytest
+```
+
+For detailed test case reports with execution traces:
+
+```bash
+pytest -v
+```
