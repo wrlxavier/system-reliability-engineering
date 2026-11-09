@@ -476,6 +476,115 @@ The table below contrasts the exact analytical solutions against the stochastic 
 *Validation Conclusion:* For all architectural scenarios, the analytical benchmark lies strictly within the empirical 95% confidence interval, and the availability relative error is two orders of magnitude below the $0.05\%$ threshold ($\le 0.00064\%$), confirming the mathematical and computational integrity of the stochastic simulation engine.
 
 
+### 8.6 Asymptotic Convergence Analysis and Strong Law of Large Numbers (SLLN)
+
+Let $A_1, A_2, \dots, A_N$ denote the sequence of independent and identically distributed (i.i.d.) annual operational availability realizations generated across Monte Carlo replications. The cumulative sample mean sequence is defined as [3]:
+
+$$\hat{A}(n) = \frac{1}{n} \sum_{k=1}^n A_k, \quad \text{for } n \in \{1, 2, \dots, N\}$$
+
+By Kolmogorov's Strong Law of Large Numbers (SLLN), since the availability random variable is bounded ($A_k \in [0, 1] \implies \mathbb{E}[|A_k|] < \infty$), the empirical sequence converges almost surely to the exact theoretical expectation:
+
+$$\mathbb{P}\left(\lim_{n \to \infty} \hat{A}(n) = A_{\text{theo}}\right) = 1$$
+
+Furthermore, by the Lindeberg-Lévy Central Limit Theorem, the asymptotic error distribution follows:
+
+$$\sqrt{n}\left(\hat{A}(n) - A_{\text{theo}}\right) \xrightarrow{d} \mathcal{N}\left(0, \sigma_A^2\right)$$
+
+At each simulation iteration step $n$, the bilateral $95\%$ confidence envelope has a half-width shrinking strictly at rate $\mathcal{O}(1/\sqrt{n})$:
+
+$$\Delta_n = z_{0.975} \frac{s_A(n)}{\sqrt{n}} = 1.959964 \times \frac{s_A(n)}{\sqrt{n}}$$
+
+$$\text{CI}_{95\%}(n) = \left[ \hat{A}(n) - \Delta_n, \quad \hat{A}(n) + \Delta_n \right]$$
+
+where $s_A(n) = \sqrt{\frac{1}{n-1}\sum_{k=1}^n (A_k - \hat{A}(n))^2}$ is the unbiased running sample standard deviation.
+
+#### Asymptotic Convergence Milestones ($N = 10^4$, Seed = 2026)
+
+The table below traces the convergence progression at key iteration checkpoints across all three architectural scenarios:
+
+| Checkpoint ($n$) | Metric | Scenario 1 (Baseline Series) | Scenario 2 (Multi-AZ Series-Parallel) | Scenario 3 (Multi-Gateway Expansion) |
+| :---: | :--- | :---: | :---: | :---: |
+| **$n = 10$** | Cumulative Mean $\hat{A}(n)$<br>95% Margin of Error $\Delta_n$<br>Relative Error $\varepsilon_{\text{rel}}$ | $99.00506\%$<br>$\pm 0.08408\%$<br>$0.06262\%$ | $99.87120\%$<br>$\pm 0.02998\%$<br>$0.00886\%$ | $99.93427\%$<br>$\pm 0.02530\%$<br>$0.00429\%$ |
+| **$n = 50$** | Cumulative Mean $\hat{A}(n)$<br>95% Margin of Error $\Delta_n$<br>Relative Error $\varepsilon_{\text{rel}}$ | $98.94312\%$<br>$\pm 0.03258\%$<br>$0.00002\%$ | $99.88591\%$<br>$\pm 0.01107\%$<br>$0.00587\%$ | $99.93756\%$<br>$\pm 0.00835\%$<br>$0.00758\%$ |
+| **$n = 100$** | Cumulative Mean $\hat{A}(n)$<br>95% Margin of Error $\Delta_n$<br>Relative Error $\varepsilon_{\text{rel}}$ | $98.93972\%$<br>$\pm 0.02609\%$<br>$0.00342\%$ | $99.88182\%$<br>$\pm 0.00770\%$<br>$0.00178\%$ | $99.93055\%$<br>$\pm 0.00704\%$<br>$0.00056\%$ |
+| **$n = 500$** | Cumulative Mean $\hat{A}(n)$<br>95% Margin of Error $\Delta_n$<br>Relative Error $\varepsilon_{\text{rel}}$ | $98.95172\%$<br>$\pm 0.01157\%$<br>$0.00871\%$ | $99.88008\%$<br>$\pm 0.00389\%$<br>$0.00003\%$ | $99.92905\%$<br>$\pm 0.00334\%$<br>$0.00094\%$ |
+| **$n = 1{,}000$** | Cumulative Mean $\hat{A}(n)$<br>95% Margin of Error $\Delta_n$<br>Relative Error $\varepsilon_{\text{rel}}$ | $98.95095\%$<br>$\pm 0.00846\%$<br>$0.00793\%$ | $99.88027\%$<br>$\pm 0.00266\%$<br>$0.00023\%$ | $99.92988\%$<br>$\pm 0.00229\%$<br>$0.00011\%$ |
+| **$n = 5{,}000$** | Cumulative Mean $\hat{A}(n)$<br>95% Margin of Error $\Delta_n$<br>Relative Error $\varepsilon_{\text{rel}}$ | $98.94412\%$<br>$\pm 0.00367\%$<br>$0.00103\%$ | $99.87979\%$<br>$\pm 0.00120\%$<br>$0.00026\%$ | $99.92923\%$<br>$\pm 0.00102\%$<br>$0.00076\%$ |
+| **$n = 10{,}000$** | Cumulative Mean $\hat{A}(n)$<br>95% Margin of Error $\Delta_n$<br>Relative Error $\varepsilon_{\text{rel}}$ | **$98.94247\%$**<br>**$\pm 0.00258\%$**<br>**$0.00064\%$** | **$99.88024\%$**<br>**$\pm 0.00084\%$**<br>**$0.00019\%$** | **$99.92933\%$**<br>**$\pm 0.00072\%$**<br>**$0.00066\%$** |
+| **Benchmark ($A_{\text{theo}}$)** | Analytical Availability | **$98.94310\%$** | **$99.88005\%$** | **$99.92999\%$** |
+
+*Convergence Analysis:* For all configurations, relative error falls below $0.01\%$ for $n \ge 500$ iterations and achieves sub-$0.001\%$ precision at $N = 10^4$, validating asymptotic stability and proving that the $N = 10^4$ sample size satisfies IEEE publication requirements.
+
+
+### 8.7 Empirical Annual Downtime Distribution and Value-at-Risk (SLA Risk Metrics)
+
+Annual downtime $D_k = \sum_m (\text{end}_m - \text{start}_m)$ is a continuous random variable whose distribution depends on architectural topology and renewal intensity:
+
+1. **Scenario 1 (Baseline Pure Series):**
+   Outages occur across all four unredundant blocks at rate $\Lambda = \sum_{i=1}^4 \lambda_i = 16.476 \times 10^{-3}\text{ h}^{-1}$, generating an expected $142.93$ independent failure events annually. By the Central Limit Theorem applied to renewal counts and outage durations, the distribution of annual downtime $D_{\text{base}}$ converges closely to a normal profile:
+   - Sample Mean: $\hat{\mu}_D = 92.64\text{ h/year}$
+   - Sample Standard Deviation: $s_D = 11.55\text{ h/year}$
+   - Skewness: $\gamma_1 = 0.1874 \approx 0$ (near-zero skewness, nearly symmetric)
+   - Excess Kurtosis: $\gamma_2 = -0.0140 \approx 0$ (mesokurtic, near-Gaussian tails)
+
+2. **Scenario 2 (Multi-AZ Series-Parallel):**
+   Active redundancy at the compute tier collapses independent application outages. Annual downtime is governed by single-point database failovers and external payment gateway outages (~$18.43$ events/year). Because outages are rarer and have exponential durations, the distribution exhibits moderate right-skewness:
+   - Sample Mean: $\hat{\mu}_D = 10.49\text{ h/year}$
+   - Sample Standard Deviation: $s_D = 3.74\text{ h/year}$
+   - Skewness: $\gamma_1 = 0.5785$ (moderately positive right-skew)
+   - Excess Kurtosis: $\gamma_2 = 0.4229$ (leptokurtic, heavier right tail)
+
+3. **Scenario 3 (Multi-Gateway Expansion):**
+   With active payment gateway redundancy, external outages drop to near zero (~$0.0029\text{ h/yr}$). Total downtime is driven almost entirely by database Multi-AZ failovers (~$7.94$ events/year), amplifying right-skewness:
+   - Sample Mean: $\hat{\mu}_D = 6.19\text{ h/year}$
+   - Sample Standard Deviation: $s_D = 3.20\text{ h/year}$
+   - Skewness: $\gamma_1 = 0.8627$ (pronounced right-skew)
+   - Excess Kurtosis: $\gamma_2 = 1.0504$ (heavier tail)
+
+#### Risk Percentiles and Operational SLA Thresholds Table
+
+In contractual Service Level Agreements, point estimators alone are insufficient because financial penalties occur during extreme tail events. Percentiles provide operational Value-at-Risk (VaR) thresholds:
+
+| Statistical Metric | Scenario 1 (Baseline Series) | Scenario 2 (Multi-AZ Series-Parallel) | Scenario 3 (Multi-Gateway Expansion) | Engineering Interpretation |
+| :--- | :---: | :---: | :---: | :--- |
+| **Analytical Mean ($D$)** | **$92.58\text{ h/year}$** | **$10.51\text{ h/year}$** | **$6.13\text{ h/year}$** | Theoretical long-term expectation |
+| **Simulated Mean ($\hat{D}$)** | **$92.64\text{ h/year}$** | **$10.49\text{ h/year}$** | **$6.19\text{ h/year}$** | Empirical average over $10^4$ years |
+| **Standard Deviation ($s_D$)** | $11.55\text{ h/year}$ | $3.74\text{ h/year}$ | $3.20\text{ h/year}$ | Sample dispersion |
+| **Median ($p_{50}$)** | $92.16\text{ h/year}$ | $10.12\text{ h/year}$ | $5.73\text{ h/year}$ | 50% probability threshold |
+| **90th Percentile ($p_{90}$)** | $107.72\text{ h/year}$ | $15.53\text{ h/year}$ | $10.51\text{ h/year}$ | Upper decile operational budget |
+| **95th Percentile ($D_{0.95}$)** | **$112.21\text{ h/year}$** | **$17.17\text{ h/year}$** | **$12.07\text{ h/year}$** | **SLA Risk Boundary (95% certainty)** |
+| **99th Percentile ($D_{0.99}$)** | **$121.15\text{ h/year}$** | **$20.85\text{ h/year}$** | **$15.45\text{ h/year}$** | Extreme tail risk (worst 1-in-100 years) |
+| **Minimum Observed** | $53.52\text{ h/year}$ | $1.14\text{ h/year}$ | $0.06\text{ h/year}$ | Best-case simulated year |
+| **Maximum Observed** | $138.15\text{ h/year}$ | $29.04\text{ h/year}$ | $23.24\text{ h/year}$ | Worst-case simulated year |
+| **Risk Buffer ($D_{0.95} - \hat{D}$)** | $+19.57\text{ h/year}$ | $+6.68\text{ h/year}$ | $+5.88\text{ h/year}$ | Contractual safety margin needed |
+
+*Operational Risk Finding:* Multi-AZ redundancy reduces the 95th percentile worst-case downtime from $112.21\text{ h}$ to $17.17\text{ h}$ ($-84.7\%$), drastically reducing the probability of catastrophic SLA penalty payments.
+
+
+### 8.8 Simulated Subsystem Downtime Breakdown and Pareto Cross-Validation
+
+The discrete-event simulation records individual downtime intervals $\mathcal{I}_i^{(k)}$ per subsystem $i \in \{\text{LB}, \text{App}, \text{DB}, \text{PGW}\}$. The empirical mean subsystem downtime is:
+
+$$\hat{D}_i = \frac{1}{N} \sum_{k=1}^N D_{i, k}$$
+
+The table below contrasts the analytical downtime contributions derived in Section 3 and Section 8 against the empirical Monte Carlo subsystem averages:
+
+| Architectural Tier | Subsystem Code | Scenario 1 Analytical ($D_i$) | Scenario 1 Simulated ($\hat{D}_i$) | Scenario 2 Analytical ($D_i$) | Scenario 2 Simulated ($\hat{D}_i$) | Scenario 3 Analytical ($D_i$) | Scenario 3 Simulated ($\hat{D}_i$) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Load Balancer** | **LB** | $0.876\text{ h}$ ($0.94\%$) | $0.867\text{ h}$ ($0.94\%$) | $0.876\text{ h}$ ($8.33\%$) | $0.882\text{ h}$ ($8.40\%$) | $0.876\text{ h}$ ($14.28\%$) | $0.878\text{ h}$ ($14.18\%$) |
+| **Application Server** | **App** | $43.800\text{ h}$ ($47.17\%$) | $43.849\text{ h}$ ($47.33\%$) | $0.876\text{ h}$ ($8.33\%$) | $0.874\text{ h}$ ($8.33\%$) | $0.876\text{ h}$ ($14.28\%$) | $0.882\text{ h}$ ($14.25\%$) |
+| **Database Engine** | **DB** | $43.800\text{ h}$ ($47.17\%$) | $43.783\text{ h}$ ($47.26\%$) | $4.380\text{ h}$ ($41.67\%$) | $4.355\text{ h}$ ($41.51\%$) | $4.380\text{ h}$ ($71.41\%$) | $4.429\text{ h}$ ($71.54\%$) |
+| **Payment Gateway** | **PGW** | $4.380\text{ h}$ ($4.72\%$) | $4.412\text{ h}$ ($4.76\%$) | $4.380\text{ h}$ ($41.67\%$) | $4.386\text{ h}$ ($41.80\%$) | $0.002\text{ h}$ ($0.03\%$) | $0.003\text{ h}$ ($0.05\%$) |
+| **System Downtime** | **Total** | **$92.584\text{ h}$** | **$92.639\text{ h}$** | **$10.508\text{ h}$** | **$10.491\text{ h}$** | **$6.133\text{ h}$** | **$6.191\text{ h}$** |
+
+#### Cross-Validation Conclusions
+1. **Pareto Hierarchy Replication:** The stochastic simulation perfectly reproduces the analytical Pareto findings:
+   - In Scenario 1, App ($43.85\text{ h}$) and DB ($43.78\text{ h}$) cause $94.59\%$ of all outages.
+   - In Scenario 2, compute downtime collapses by $98.01\%$, shifting the co-dominant bottlenecks to DB ($41.51\%$) and PGW ($41.80\%$).
+   - In Scenario 3, redundant gateways eliminate the third-party bottleneck ($0.003\text{ h}$), leaving the database tier as the primary bottleneck ($71.54\%$).
+2. **Multi-Subsystem Overlap Integrity:** Total system downtime is slightly less than the arithmetic sum of subsystem downtimes due to temporal overlaps ($\mu(\bigcup \mathcal{I}_i) \le \sum \mu(\mathcal{I}_i)$), with simulated overlap measure matching analytical expectation $\Delta = 0.272\text{ h/year}$.
+
+
 ## 9. References
 
 [1] P. D. T. O'Connor and A. Kleyner, *Practical Reliability Engineering*, 5th ed. Chichester, UK: John Wiley & Sons, 2012. DOI: 10.1002/9781119961260.

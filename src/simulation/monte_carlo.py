@@ -10,6 +10,7 @@ bilateral 95% confidence intervals, and exports automated empirical metrics
 """
 
 from dataclasses import dataclass, field
+import math
 from pathlib import Path
 import time
 from typing import Dict, List, Optional, Tuple, Union
@@ -136,6 +137,42 @@ class ScenarioSimulationResult:
         for code, sub_dt in self.subsystem_downtimes.items():
             df[f"downtime_{code}_hours"] = sub_dt
         return df
+
+
+@dataclass
+class EmpiricalDistributionSummary:
+    """Empirical distribution metrics and risk quantiles for simulation outputs.
+
+    Attributes:
+        scenario_id: Scenario identifier (1, 2, or 3).
+        scenario_name: Human-readable scenario name.
+        sample_size: Number of evaluated iterations N.
+        mean: Sample mean.
+        std: Sample standard deviation (unbiased, ddof=1).
+        sem: Standard error of the mean (std / sqrt(N)).
+        median: 50th percentile (median).
+        p90: 90th percentile.
+        p95: 95th percentile (Value-at-Risk / 95% SLA boundary).
+        p99: 99th percentile (extreme tail risk).
+        min_val: Minimum observed sample value.
+        max_val: Maximum observed sample value.
+        skewness: Fisher-Pearson coefficient of skewness.
+        kurtosis: Excess kurtosis (Fisher definition).
+    """
+    scenario_id: int
+    scenario_name: str
+    sample_size: int
+    mean: float
+    std: float
+    sem: float
+    median: float
+    p90: float
+    p95: float
+    p99: float
+    min_val: float
+    max_val: float
+    skewness: float
+    kurtosis: float
 
 
 def sample_exponential_variable(
@@ -714,3 +751,94 @@ def compute_convergence_series(availabilities: np.ndarray) -> np.ndarray:
     n = len(availabilities)
     indices = np.arange(1, n + 1, dtype=np.float64)
     return np.cumsum(availabilities) / indices
+
+
+def compute_running_statistics(
+    samples: np.ndarray,
+    confidence_level: float = 0.95,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute running cumulative sample mean, standard deviation, and confidence half-width.
+
+    Formulas:
+        mean(n) = (1 / n) * sum_{k=1}^n x_k
+        var(n) = (1 / (n - 1)) * [sum x_k^2 - n * mean(n)^2]  (for n >= 2)
+        margin(n) = z_{1 - alpha/2} * std(n) / sqrt(n)
+
+    Args:
+        samples: 1D array of sample values of length N.
+        confidence_level: Two-sided confidence level (default: 0.95).
+
+    Returns:
+        Tuple of (cumulative_mean, running_std, margin_of_error), each of length N.
+    """
+    n = len(samples)
+    if n == 0:
+        return np.array([]), np.array([]), np.array([])
+
+    indices = np.arange(1, n + 1, dtype=np.float64)
+    cum_mean = np.cumsum(samples) / indices
+
+    cum_sq_sum = np.cumsum(samples ** 2)
+    cum_var = np.zeros(n, dtype=np.float64)
+    if n > 1:
+        cum_var[1:] = (cum_sq_sum[1:] - indices[1:] * (cum_mean[1:] ** 2)) / (indices[1:] - 1.0)
+        cum_var = np.maximum(cum_var, 0.0)
+
+    cum_std = np.sqrt(cum_var)
+    if n > 0:
+        cum_std[0] = 0.0
+
+    z_critical = stats.norm.ppf(1.0 - (1.0 - confidence_level) / 2.0)
+    sem = np.zeros(n, dtype=np.float64)
+    sem[1:] = cum_std[1:] / np.sqrt(indices[1:])
+    margin_of_error = z_critical * sem
+
+    return cum_mean, cum_std, margin_of_error
+
+
+def compute_empirical_distribution_summary(
+    samples: np.ndarray,
+    scenario_id: int = 1,
+    scenario_name: str = "",
+) -> EmpiricalDistributionSummary:
+    """Compute empirical distribution metrics and risk percentiles for sample array.
+
+    Args:
+        samples: 1D array of sample values (e.g. annual downtime hours).
+        scenario_id: Scenario identifier.
+        scenario_name: Human-readable scenario name.
+
+    Returns:
+        EmpiricalDistributionSummary with mean, std, quantiles, and higher moments.
+    """
+    n = len(samples)
+    if n == 0:
+        raise ValueError("Cannot compute empirical distribution summary for empty samples.")
+    mean_val = float(np.mean(samples))
+    std_val = float(np.std(samples, ddof=1)) if n > 1 else 0.0
+    sem_val = std_val / math.sqrt(n) if n > 0 else 0.0
+    median_val = float(np.percentile(samples, 50.0))
+    p90_val = float(np.percentile(samples, 90.0))
+    p95_val = float(np.percentile(samples, 95.0))
+    p99_val = float(np.percentile(samples, 99.0))
+    min_val = float(np.min(samples))
+    max_val = float(np.max(samples))
+    skew_val = float(stats.skew(samples)) if n > 2 else 0.0
+    kurt_val = float(stats.kurtosis(samples)) if n > 3 else 0.0
+
+    return EmpiricalDistributionSummary(
+        scenario_id=scenario_id,
+        scenario_name=scenario_name,
+        sample_size=n,
+        mean=mean_val,
+        std=std_val,
+        sem=sem_val,
+        median=median_val,
+        p90=p90_val,
+        p95=p95_val,
+        p99=p99_val,
+        min_val=min_val,
+        max_val=max_val,
+        skewness=skew_val,
+        kurtosis=kurt_val,
+    )
