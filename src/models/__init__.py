@@ -31,6 +31,14 @@ from src.models.analytical_reliability import (
     evaluate_mttf_metrics,
     plot_reliability_curves,
 )
+from src.models.pareto import (
+    SubsystemDowntimeContribution,
+    ParetoAnalysisResult,
+    compute_subsystem_downtime_contributions,
+    evaluate_pareto_analysis,
+    get_pareto_dataframe,
+    compute_bottleneck_shift_summary,
+)
 
 __all__ = [
     "BlockParameters",
@@ -58,4 +66,10 @@ __all__ = [
     "calculate_mttf_scenario_3_closed_form",
     "evaluate_mttf_metrics",
     "plot_reliability_curves",
+    "SubsystemDowntimeContribution",
+    "ParetoAnalysisResult",
+    "compute_subsystem_downtime_contributions",
+    "evaluate_pareto_analysis",
+    "get_pareto_dataframe",
+    "compute_bottleneck_shift_summary",
 ]
