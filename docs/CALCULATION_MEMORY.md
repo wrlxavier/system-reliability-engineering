@@ -263,7 +263,220 @@ The table below contrasts uninterrupted survival probabilities $R(t)$ across cri
 | | 72-hour Survival $R(72\text{ h})$ | $30.54\%$ | **$60.31\%$** | $64.50\%$ | $R(72)$ |
 
 
-## 7. References
+## 7. Subsystem Unavailability and Downtime Pareto Analysis
+
+Pareto analysis quantifies the relative impact of individual architectural tiers on total system downtime, identifying the primary single points of failure (SPOFs) in baseline designs and revealing the bottleneck migration induced by fault-tolerant redundancy [1], [7].
+
+### 7.1 Mathematical Formulation of Unavailability Allocation
+
+Each subsystem $i \in \{\text{LB}, \text{App}, \text{DB}, \text{PGW}\}$ exhibits steady-state unavailability $U_i = 1 - A_i$. Over an annual mission duration $T = 8760\text{ hours}$ ($525{,}600\text{ minutes}$), the standalone expected annual downtime is:
+
+$$D_i = U_i \times T = (1 - A_i) \times 8760\text{ hours/year}$$
+
+The aggregate sum of standalone subsystem downtimes across all $n$ blocks is:
+
+$$D_{\text{sum}} = \sum_{i=1}^n D_i = T \sum_{i=1}^n U_i$$
+
+#### 7.1.1 Relation to Exact System Downtime (Overlapping Outage Derivation)
+For an unredundant pure series system of independent blocks:
+
+$$A_{\text{sys}} = \prod_{i=1}^n A_i = \prod_{i=1}^n (1 - U_i) = 1 - \sum_{i=1}^n U_i + \sum_{1 \le i < j \le n} U_i U_j - \dots$$
+
+$$U_{\text{sys}} = 1 - A_{\text{sys}} = \sum_{i=1}^n U_i - \sum_{1 \le i < j \le n} U_i U_j + \dots \le \sum_{i=1}^n U_i$$
+
+Because $U_i \ll 1$ in carrier-grade cloud architectures ($U_i \le 5 \times 10^{-3}$), higher-order joint outage products are negligible:
+
+$$\varepsilon_{\text{overlap}} = \frac{D_{\text{sum}} - D_{\text{sys}}}{D_{\text{sys}}} = \frac{\sum_{1 \le i < j \le n} U_i U_j + \dots}{U_{\text{sys}}}$$
+
+- **Scenario 1:** $D_{\text{sum}} = 92.8560\text{ h}$, $D_{\text{base}} = 92.5841\text{ h} \implies \Delta = 0.2719\text{ h}$ ($16.31\text{ min/yr}$, $\varepsilon = 0.293\%$).
+- **Scenario 2:** $D_{\text{sum}} = 10.5120\text{ h}$, $D_{\text{red}} = 10.5080\text{ h} \implies \Delta = 0.0040\text{ h}$ ($14.50\text{ s/yr}$, $\varepsilon = 0.038\%$).
+- **Scenario 3:** $D_{\text{sum}} = 6.1342\text{ h}$, $D_{\text{scen3}} = 6.1332\text{ h} \implies \Delta = 0.0010\text{ h}$ ($3.50\text{ s/yr}$, $\varepsilon = 0.016\%$).
+
+The first-order linear approximation holds with $>99.7\%$ precision across all scenarios.
+
+#### 7.1.2 Fractional Downtime Contribution and Cumulative Pareto Ranking
+Subsystems are sorted in descending order of individual downtime: $D_{(1)} \ge D_{(2)} \ge \dots \ge D_{(n)}$.
+
+The individual percentage share of total subsystem downtime is:
+
+$$p_i = \frac{D_i}{\sum_{j=1}^n D_j} \times 100\% = \frac{U_i}{\sum_{j=1}^n U_j} \times 100\%$$
+
+The cumulative Pareto distribution function $C_k$ for the top $k$ contributors is:
+
+$$C_k = \sum_{j=1}^k p_{(j)} = \frac{\sum_{j=1}^k D_{(j)}}{\sum_{j=1}^n D_j} \times 100\%, \quad C_n = 100\%$$
+
+The proportionally allocated share of exact system downtime is:
+
+$$D_{i, \text{alloc}} = \frac{D_i}{D_{\text{sum}}} \times D_{\text{sys}} = \frac{p_i}{100} \times D_{\text{sys}}$$
+
+
+### 7.2 Scenario 1 Pareto Decomposition (Baseline Pure Series)
+
+In Scenario 1, every subsystem is an unredundant Single Point of Failure (SPOF):
+
+| Pareto Rank | Block Code | Subsystem Name | Architectural Tier | Availability ($A_i$) | Unavailability ($U_i$) | Standalone Downtime ($D_i$) | Share ($p_i$) | Cumulative Share ($C_k$) | Allocated Downtime ($D_{i,\text{alloc}}$) |
+| :---: | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1** | **App** | Application Server | Business Logic | $99.5000\%$ | $5000\text{ ppm}$ | $43.8000\text{ h/yr}$ | $\mathbf{47.17\%}$ | $47.17\%$ | $43.6718\text{ h/yr}$ |
+| **2** | **DB** | Relational Database | Data Persistence | $99.5000\%$ | $5000\text{ ppm}$ | $43.8000\text{ h/yr}$ | $\mathbf{47.17\%}$ | $\mathbf{94.34\%}$ | $43.6718\text{ h/yr}$ |
+| **3** | **PGW** | Payment Gateway | External Settlement | $99.9500\%$ | $500\text{ ppm}$ | $4.3800\text{ h/yr}$ | $4.72\%$ | $99.06\%$ | $4.3672\text{ h/yr}$ |
+| **4** | **LB** | Load Balancer | Ingress Routing | $99.9900\%$ | $100\text{ ppm}$ | $0.8760\text{ h/yr}$ | $0.94\%$ | $100.00\%$ | $0.8734\text{ h/yr}$ |
+| **Total** | — | **Full System (Pure Series)** | — | **$98.9431\%$** | **$10569\text{ ppm}$** | **$92.8560\text{ h/yr}$** | **$100.00\%$** | — | **$92.5841\text{ h/yr}$** |
+
+**Core Analytical Insight (S1):**
+- **App and DB combined represent $94.34\%$** of all system downtime ($87.60\text{ hours/year}$ out of $92.86\text{ hours}$).
+- Under the Pareto 80/20 principle, mitigating solely the top two internal tiers eliminates $>94\%$ of the reliability penalty.
+
+
+### 7.3 Scenario 2 Pareto Decomposition (Multi-AZ Series-Parallel)
+
+With active Multi-AZ redundancy deployed across Application instances ($A_{2,\text{red}} = 99.99\%$) and Database synchronous replication ($A_{3,\text{red}} = 99.95\%$):
+
+| Pareto Rank | Block Code | Subsystem Name | Architectural Tier | Availability ($A_i$) | Unavailability ($U_i$) | Standalone Downtime ($D_i$) | Share ($p_i$) | Cumulative Share ($C_k$) | Allocated Downtime ($D_{i,\text{alloc}}$) |
+| :---: | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1** | **DB** | Relational Database | Multi-AZ Failover | $99.9500\%$ | $500\text{ ppm}$ | $4.3800\text{ h/yr}$ | $\mathbf{41.67\%}$ | $41.67\%$ | $4.3783\text{ h/yr}$ |
+| **2** | **PGW** | Payment Gateway | External Settlement | $99.9500\%$ | $500\text{ ppm}$ | $4.3800\text{ h/yr}$ | $\mathbf{41.67\%}$ | $\mathbf{83.33\%}$ | $4.3783\text{ h/yr}$ |
+| **3** | **LB** | Load Balancer | Ingress Routing | $99.9900\%$ | $100\text{ ppm}$ | $0.8760\text{ h/yr}$ | $8.33\%$ | $91.67\%$ | $0.8757\text{ h/yr}$ |
+| **4** | **App** | Application Server | Multi-AZ Active-Active | $99.9900\%$ | $100\text{ ppm}$ | $0.8760\text{ h/yr}$ | $8.33\%$ | $100.00\%$ | $0.8757\text{ h/yr}$ |
+| **Total** | — | **Full System (Multi-AZ)** | — | **$99.8800\%$** | **$1200\text{ ppm}$** | **$10.5120\text{ h/yr}$** | **$100.00\%$** | — | **$10.5080\text{ h/yr}$** |
+
+**Core Analytical Insight (S2 - The Bottleneck Shift):**
+- Application downtime collapsed from $43.80\text{ h}$ to $0.876\text{ h}$ ($\mathbf{98.00\%\text{ reduction}}$).
+- Database downtime fell from $43.80\text{ h}$ to $4.38\text{ h}$ ($\mathbf{90.00\%\text{ reduction}}$).
+- Total internal tier downtime dropped by $\mathbf{94.00\%}$ (from $87.60\text{ h}$ to $5.256\text{ h}$).
+- Because the external Payment Gateway remained unredundant at $99.95\%$ ($4.38\text{ h/yr}$), its relative share of system downtime multiplied by $\mathbf{8.83\times}$ (from $4.72\%$ to $\mathbf{41.67\%}$).
+- **DB and PGW now jointly account for $83.33\%$** of all system downtime ($8.76\text{ hours/year}$ out of $10.51\text{ hours}$).
+
+
+### 7.4 Scenario 3 Pareto Decomposition (Multi-Gateway Expansion)
+
+Incorporating active parallel redundancy on the external Payment Gateway ($A_{4,\text{red}} = 99.999975\%$):
+
+| Pareto Rank | Block Code | Subsystem Name | Architectural Tier | Availability ($A_i$) | Unavailability ($U_i$) | Standalone Downtime ($D_i$) | Share ($p_i$) | Cumulative Share ($C_k$) | Allocated Downtime ($D_{i,\text{alloc}}$) |
+| :---: | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **1** | **DB** | Relational Database | Multi-AZ Failover | $99.9500\%$ | $500\text{ ppm}$ | $4.3800\text{ h/yr}$ | $\mathbf{71.41\%}$ | $\mathbf{71.41\%}$ | $4.3793\text{ h/yr}$ |
+| **2** | **LB** | Load Balancer | Ingress Routing | $99.9900\%$ | $100\text{ ppm}$ | $0.8760\text{ h/yr}$ | $14.28\%$ | $85.69\%$ | $0.8759\text{ h/yr}$ |
+| **3** | **App** | Application Server | Multi-AZ Active-Active | $99.9900\%$ | $100\text{ ppm}$ | $0.8760\text{ h/yr}$ | $14.28\%$ | $99.96\%$ | $0.8759\text{ h/yr}$ |
+| **4** | **PGW** | Payment Gateway | Dual Active-Active Gateways | $99.999975\%$ | $0.25\text{ ppm}$ | $0.00219\text{ h/yr}$ ($7.88\text{ s}$) | $\mathbf{0.04\%}$ | $100.00\%$ | $0.00219\text{ h/yr}$ |
+| **Total** | — | **Full System (Multi-Gateway)** | — | **$99.9300\%$** | **$700\text{ ppm}$** | **$6.1342\text{ h/yr}$** | **$100.00\%$** | — | **$6.1332\text{ h/yr}$** |
+
+**Core Analytical Insight (S3):**
+- Dual payment gateway routing virtually eliminates external dependency risk, reducing PGW downtime from $4.38\text{ h}$ to $\mathbf{7.88\text{ seconds/year}}$ ($\mathbf{99.95\%\text{ reduction}}$).
+- Transactional Database failover ($4.38\text{ h/yr}$) now accounts for $\mathbf{71.41\%}$ of all remaining downtime, establishing the ultimate architectural asymptote under current synchronous persistence technology.
+
+
+### 7.5 Quantitative Summary of Bottleneck Shifts
+
+The table below contrasts the distribution of annual downtime across architectural generations, demonstrating Amdahl's Law for system reliability:
+
+| Subsystem / Metric | Scenario 1 (Baseline Series) | Scenario 2 (Multi-AZ Series-Parallel) | Scenario 3 (Multi-Gateway Expansion) | Shift Trend & Engineering Implication |
+| :--- | :---: | :---: | :---: | :--- |
+| **Application Server (App)** | $43.80\text{ h}$ ($47.17\%$) | $0.88\text{ h}$ ($8.33\%$) | $0.88\text{ h}$ ($14.28\%$) | Slashed by $98.0\%$; eliminated as primary SPOF |
+| **Transactional Database (DB)** | $43.80\text{ h}$ ($47.17\%$) | $4.38\text{ h}$ ($41.67\%$) | $4.38\text{ h}$ ($\mathbf{71.41\%}$) | Reduced by $90.0\%$; becomes primary remaining bottleneck |
+| **Internal Tiers Combined (App + DB)** | **$87.60\text{ h}$ ($94.34\%$)** | **$5.26\text{ h}$ ($50.00\%$)** | **$5.26\text{ h}$ ($85.69\%$)** | Internal downtime reduced by $94.0\%$ |
+| **Payment Gateway (PGW)** | $4.38\text{ h}$ ($4.72\%$) | $4.38\text{ h}$ ($\mathbf{41.67\%}$) | $0.002\text{ h}$ ($0.04\%$) | Relative share surged $8.8\times$ in S2; wiped out in S3 |
+| **Load Balancer (LB)** | $0.88\text{ h}$ ($0.94\%$) | $0.88\text{ h}$ ($8.33\%$) | $0.88\text{ h}$ ($14.28\%$) | Invariant baseline floor; managed infrastructure baseline |
+| **Top 2 Contributors Combined ($C_2$)** | **$94.34\%$** (App, DB) | **$83.33\%$** (DB, PGW) | **$85.69\%$** (DB, LB) | Governed by Pareto principle in all configurations |
+| **Total System Downtime** | **$92.58\text{ h/year}$** | **$10.51\text{ h/year}$** | **$6.13\text{ h/year}$** | **$93.38\%\text{ total downtime reduction}$** |
+
+
+## 8. Stochastic Discrete-Event Monte Carlo Simulation & Statistical Inference
+
+Stochastic simulation provides empirical cross-validation of the closed-form analytical models, capturing dynamic state transitions and finite-horizon edge effects over an annual operational lifespan $T = 8760\text{ hours}$ ($525{,}600\text{ minutes}$) across $N = 10^4$ independent simulated years [3], [6], [9].
+
+
+### 8.1 Continuous-Time Alternating Renewal Process
+
+Each functional subsystem $i \in \{\text{LB}, \text{App}, \text{DB}, \text{PGW}\}$ operates as an alternating renewal process governed by two independent continuous random variables:
+1. **Time to Failure ($\text{TTF}_i$):** Distributed exponentially with constant hazard rate $\lambda_i > 0$:
+   $$F_i(t) = P(\text{TTF}_i \le t) = 1 - e^{-\lambda_i t}, \quad f_i(t) = \lambda_i e^{-\lambda_i t}, \quad \mathbb{E}[\text{TTF}_i] = \text{MTBF}_i = \frac{1}{\lambda_i}$$
+2. **Time to Repair ($\text{TTR}_i$):** Distributed exponentially with constant restoration rate $\mu_i > 0$:
+   $$G_i(t) = P(\text{TTR}_i \le t) = 1 - e^{-\mu_i t}, \quad g_i(t) = \mu_i e^{-\mu_i t}, \quad \mathbb{E}[\text{TTR}_i] = \text{MTTR}_i = \frac{1}{\mu_i}$$
+
+Pseudo-random variates are generated via Inverse Transform Sampling parameterized by uniform random numbers $u, v \sim \mathcal{U}(0, 1)$ initialized with a fixed seed (`np.random.seed(2026)`):
+$$\text{TTF} = -\frac{\ln(1 - u)}{\lambda_i} \stackrel{d}{=} -\frac{\ln(u)}{\lambda_i}, \quad \text{TTR} = -\frac{\ln(1 - v)}{\mu_i} \stackrel{d}{=} -\frac{\ln(v)}{\mu_i}$$
+
+For each simulated year $k \in \{1, \dots, N\}$, the renewal sequence generates an ordered set of disjoint outage intervals within the finite horizon $[0, T]$:
+$$\mathcal{I}_i^{(k)} = \bigcup_{j=1}^{M_i^{(k)}} \left[ t_{\text{fail}, j}^{(i, k)}, \min\left(t_{\text{restored}, j}^{(i, k)}, T\right) \right) \subset [0, T]$$
+
+
+### 8.2 Topological State Evaluation via Interval Arithmetic
+
+The operational state of the architecture at time $t \in [0, T]$ is evaluated through Boolean structure functions translated into exact set-theoretic operations on outage intervals:
+
+1. **Pure Series System (Scenario 1):**
+   The payment pipeline fails if *any* subsystem is down ($S_{\text{sys}}(t) = \prod_{i=1}^4 S_i(t)$). Thus, the system outage set is the set union of all constituent outages:
+   $$\mathcal{I}_{\text{base}}^{(k)} = \bigcup_{i=1}^4 \mathcal{I}_i^{(k)}$$
+   Because outages can temporally overlap across independent subsystems, exact annual downtime is the Lebesgue measure of the merged union:
+   $$D_{\text{base}}^{(k)} = \mu_{\text{Lebesgue}}\left( \mathcal{I}_{\text{base}}^{(k)} \right) = \sum_{m} \left( \text{end}_m - \text{start}_m \right)$$
+   This naturally captures the overlapping outage term $\Delta = 0.2719\text{ h/year}$ derived in Section 7.1.1.
+
+2. **Active Parallel Redundancy (1-out-of-2):**
+   A parallel subsystem of two independent units is unavailable only during concurrent failures (temporal intersection):
+   $$\mathcal{I}_{\text{parallel}}^{(k)} = \mathcal{I}_{\text{unit 1}}^{(k)} \cap \mathcal{I}_{\text{unit 2}}^{(k)}$$
+
+3. **Series-Parallel Architecture (Scenario 2):**
+   Under Multi-AZ series-parallel configuration, the Load Balancer and Payment Gateway operate in series with the fault-tolerant Application and Database tiers:
+   $$\mathcal{I}_{\text{red}}^{(k)} = \mathcal{I}_{\text{LB}}^{(k)} \cup \mathcal{I}_{\text{App,tier}}^{(k)} \cup \mathcal{I}_{\text{DB,tier}}^{(k)} \cup \mathcal{I}_{\text{PGW}}^{(k)}$$
+   Under contractual SLA parameterization ($A_{2,\text{red}} = 99.99\%$, $A_{3,\text{red}} = 99.95\%$), the effective transition rates directly calibrate the simulation to the verified vendor benchmarks.
+
+
+### 8.3 Statistical Estimators and Confidence Intervals
+
+For each replication $k \in \{1, \dots, N\}$, the operational availability fraction is:
+$$A_k = \frac{T_{\text{operational}, k}}{T} = \frac{T - D_k}{T} = 1 - \frac{D_k}{T}, \quad \text{where } T = 8760\text{ hours}$$
+
+The point estimator for mean system availability is the sample mean [3]:
+$$\hat{A} = \frac{1}{N} \sum_{k=1}^N A_k = \frac{1}{N} \sum_{k=1}^N \frac{T_{\text{operational}, k}}{T_{\text{operational}, k} + T_{\text{down}, k}} = 1 - \frac{\hat{D}}{T}$$
+
+The point estimator for expected annual downtime is:
+$$\hat{D} = \frac{1}{N} \sum_{k=1}^N D_k$$
+
+The unbiased sample variances are:
+$$s_A^2 = \frac{1}{N - 1} \sum_{k=1}^N \left(A_k - \hat{A}\right)^2, \quad s_D^2 = \frac{1}{N - 1} \sum_{k=1}^N \left(D_k - \hat{D}\right)^2 = T^2 s_A^2$$
+
+The Standard Error of the Mean (SEM) is:
+$$\text{SE}(\hat{A}) = \frac{s_A}{\sqrt{N}}, \quad \text{SE}(\hat{D}) = \frac{s_D}{\sqrt{N}}$$
+
+#### Bilateral 95% Confidence Interval
+By the Central Limit Theorem, for $N = 10^4 \gg 30$, the distribution of $\hat{A}$ is asymptotically Gaussian:
+$$\hat{A} \sim \mathcal{N}\left(A, \frac{\sigma^2}{N}\right)$$
+
+For a bilateral confidence level $1 - \alpha = 0.95$ ($\alpha = 0.05$), the two-tailed critical value is $z_{0.975} = 1.959964$ (or $t_{9999, 0.975} = 1.960204$ from Student's t-distribution):
+$$\text{CI}_{95\%}(\hat{A}) = \left[ \hat{A} - z_{0.975} \frac{s_A}{\sqrt{N}}, \quad \hat{A} + z_{0.975} \frac{s_A}{\sqrt{N}} \right]$$
+$$\text{CI}_{95\%}(\hat{D}) = \left[ \hat{D} - z_{0.975} \frac{s_D}{\sqrt{N}}, \quad \hat{D} + z_{0.975} \frac{s_D}{\sqrt{N}} \right]$$
+
+
+### 8.4 Relative Percentage Error Formulation
+
+The accuracy of the Monte Carlo estimator against the exact closed-form analytical availability $A$ is quantified through the relative percentage error:
+$$\varepsilon_{\text{rel}}(\hat{A}) = \frac{|\hat{A} - A|}{A} \times 100\%$$
+$$\varepsilon_{\text{rel}}(\hat{D}) = \frac{|\hat{D} - D|}{D} \times 100\%$$
+
+The acceptance threshold for numerical validation is $\varepsilon_{\text{rel}}(\hat{A}) < 0.05\%$.
+
+
+### 8.5 Empirical Validation Results Table ($N = 10^4$, Seed = 2026)
+
+The table below contrasts the exact analytical solutions against the stochastic Monte Carlo estimates obtained from the simulation engine (`src/simulation/monte_carlo.py`):
+
+| Evaluation Metric | Scenario 1 (Baseline Series) | Scenario 2 (Multi-AZ Series-Parallel) | Scenario 3 (Multi-Gateway Expansion) | Acceptance Criterion |
+| :--- | :---: | :---: | :---: | :---: |
+| **Analytical Availability ($A$)** | **$98.9431\%$** ($0.98943103$) | **$99.8800\%$** ($0.99880046$) | **$99.9300\%$** ($0.99929986$) | Theoretical Benchmark |
+| **Simulated Availability ($\hat{A}$)** | **$98.9425\%$** ($0.98942474$) | **$99.8802\%$** ($0.99880240$) | **$99.9294\%$** ($0.99929430$) | Point Estimator |
+| **Availability 95% Confidence Interval** | **$[98.9399\%, 98.9451\%]$** | **$[99.8794\%, 99.8811\%]$** | **$[99.9287\%, 99.9301\%]$** | $A \in \text{CI}_{95\%}$ (Contains Theoretical) |
+| **Availability Relative Error ($\varepsilon_{\text{rel}}$)** | **$0.00064\%$** | **$0.00019\%$** | **$0.00056\%$** | **$< 0.05\%$ (Passed)** |
+| **Analytical Downtime ($D$)** | **$92.58\text{ h/year}$** | **$10.51\text{ h/year}$** | **$6.13\text{ h/year}$** | Theoretical Benchmark |
+| **Simulated Downtime ($\hat{D}$)** | **$92.64\text{ h/year}$** | **$10.49\text{ h/year}$** | **$6.18\text{ h/year}$** | Point Estimator |
+| **Downtime 95% Confidence Interval** | **$[92.41\text{ h}, 92.87\text{ h}]$** | **$[10.42\text{ h}, 10.56\text{ h}]$** | **$[6.12\text{ h}, 6.24\text{ h}]$** | $D \in \text{CI}_{95\%}$ (Contains Theoretical) |
+| **Downtime Sample Std Dev ($s_D$)** | $11.55\text{ h}$ | $3.74\text{ h}$ | $3.19\text{ h}$ | Empirical Sample Dispersion |
+| **Standard Error of Mean ($\text{SE}$)** | $0.115\text{ h}$ ($6.93\text{ min}$) | $0.037\text{ h}$ ($2.24\text{ min}$) | $0.032\text{ h}$ ($1.91\text{ min}$) | $\text{SE} = s / \sqrt{10^4}$ |
+| **Expected Failure Events / Year** | $142.93\text{ events}$ | $18.43\text{ events}$ | $7.94\text{ events}$ | Modeled Poisson/Renewal Intensity |
+| **Execution Wall-Clock Time** | **$1.72\text{ seconds}$** | **$0.28\text{ seconds}$** | **$0.25\text{ seconds}$** | **$< 60\text{ seconds (Passed)}$** |
+
+*Validation Conclusion:* For all architectural scenarios, the analytical benchmark lies strictly within the empirical 95% confidence interval, and the availability relative error is two orders of magnitude below the $0.05\%$ threshold ($\le 0.00064\%$), confirming the mathematical and computational integrity of the stochastic simulation engine.
+
+
+## 9. References
 
 [1] P. D. T. O'Connor and A. Kleyner, *Practical Reliability Engineering*, 5th ed. Chichester, UK: John Wiley & Sons, 2012. DOI: 10.1002/9781119961260.
 
