@@ -17,6 +17,20 @@ from src.models.analytical import (
     evaluate_scenario_3,
     get_all_scenarios_summary,
 )
+from src.models.analytical_reliability import (
+    MTTFMetrics,
+    calculate_component_reliability,
+    calculate_parallel_reliability,
+    calculate_reliability_baseline,
+    calculate_reliability_redundant,
+    calculate_reliability_scenario_3,
+    calculate_mttf_baseline,
+    calculate_mttf_redundant_closed_form,
+    calculate_mttf_redundant_numerical,
+    calculate_mttf_scenario_3_closed_form,
+    evaluate_mttf_metrics,
+    plot_reliability_curves,
+)
 
 __all__ = [
     "BlockParameters",
@@ -32,4 +46,16 @@ __all__ = [
     "evaluate_scenario_2",
     "evaluate_scenario_3",
     "get_all_scenarios_summary",
+    "MTTFMetrics",
+    "calculate_component_reliability",
+    "calculate_parallel_reliability",
+    "calculate_reliability_baseline",
+    "calculate_reliability_redundant",
+    "calculate_reliability_scenario_3",
+    "calculate_mttf_baseline",
+    "calculate_mttf_redundant_closed_form",
+    "calculate_mttf_redundant_numerical",
+    "calculate_mttf_scenario_3_closed_form",
+    "evaluate_mttf_metrics",
+    "plot_reliability_curves",
 ]
