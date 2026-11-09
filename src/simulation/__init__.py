@@ -13,6 +13,7 @@ from src.simulation.monte_carlo import (
     SimulationConfig,
     SimulationMetrics,
     ScenarioSimulationResult,
+    EmpiricalDistributionSummary,
     simulate_component_renewal,
     merge_outage_intervals,
     intersect_two_interval_lists,
@@ -24,6 +25,8 @@ from src.simulation.monte_carlo import (
     compute_simulation_metrics,
     export_simulation_metrics_to_csv,
     compute_convergence_series,
+    compute_running_statistics,
+    compute_empirical_distribution_summary,
 )
 
 __all__ = [
@@ -33,6 +36,7 @@ __all__ = [
     "SimulationConfig",
     "SimulationMetrics",
     "ScenarioSimulationResult",
+    "EmpiricalDistributionSummary",
     "simulate_component_renewal",
     "merge_outage_intervals",
     "intersect_two_interval_lists",
@@ -44,4 +48,6 @@ __all__ = [
     "compute_simulation_metrics",
     "export_simulation_metrics_to_csv",
     "compute_convergence_series",
+    "compute_running_statistics",
+    "compute_empirical_distribution_summary",
 ]
