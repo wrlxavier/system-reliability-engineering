@@ -15,6 +15,18 @@ from src.visualization.plot_pareto import (
     plot_pareto_all_scenarios_3panel,
     generate_all_pareto_diagrams,
 )
+from src.visualization.plot_monte_carlo import (
+    plot_monte_carlo_convergence,
+    plot_downtime_histograms,
+    plot_simulation_subsystem_breakdown,
+    generate_all_monte_carlo_diagrams,
+)
+from src.visualization.plot_sensitivity import (
+    plot_gateway_sla_sensitivity,
+    plot_failover_and_ccf_sensitivity,
+    plot_architectural_diminishing_returns,
+    generate_all_sensitivity_diagrams,
+)
 
 __all__ = [
     "draw_rbd_scenario_1",
@@ -26,4 +38,12 @@ __all__ = [
     "plot_pareto_single_scenario",
     "plot_pareto_all_scenarios_3panel",
     "generate_all_pareto_diagrams",
+    "plot_monte_carlo_convergence",
+    "plot_downtime_histograms",
+    "plot_simulation_subsystem_breakdown",
+    "generate_all_monte_carlo_diagrams",
+    "plot_gateway_sla_sensitivity",
+    "plot_failover_and_ccf_sensitivity",
+    "plot_architectural_diminishing_returns",
+    "generate_all_sensitivity_diagrams",
 ]

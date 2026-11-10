@@ -125,7 +125,9 @@ def test_mttf_redundant_closed_form_vs_numerical():
     mttf_closed = calculate_mttf_redundant_closed_form()
     mttf_num = calculate_mttf_redundant_numerical()
 
-    # Must match to at least 8 relative significant digits
+    # Must match to strict absolute error tolerance |Delta| < 10^-9 hours
+    abs_diff = abs(mttf_closed - mttf_num)
+    assert abs_diff < 1e-9, f"Discrepancy {abs_diff} exceeds 1e-9 tolerance threshold"
     assert math.isclose(mttf_closed, mttf_num, rel_tol=1e-8)
 
     # Expected value around 106.06 hours
