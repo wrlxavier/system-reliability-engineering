@@ -39,6 +39,13 @@ from src.models.pareto import (
     get_pareto_dataframe,
     compute_bottleneck_shift_summary,
 )
+from src.models.sensitivity import (
+    get_internal_redundant_availability,
+    evaluate_gateway_availability_sensitivity,
+    evaluate_failover_coverage_sensitivity,
+    evaluate_common_cause_failure_sensitivity,
+    compute_diminishing_returns_metrics,
+)
 
 __all__ = [
     "BlockParameters",
@@ -72,4 +79,9 @@ __all__ = [
     "evaluate_pareto_analysis",
     "get_pareto_dataframe",
     "compute_bottleneck_shift_summary",
+    "get_internal_redundant_availability",
+    "evaluate_gateway_availability_sensitivity",
+    "evaluate_failover_coverage_sensitivity",
+    "evaluate_common_cause_failure_sensitivity",
+    "compute_diminishing_returns_metrics",
 ]

@@ -21,6 +21,12 @@ from src.visualization.plot_monte_carlo import (
     plot_simulation_subsystem_breakdown,
     generate_all_monte_carlo_diagrams,
 )
+from src.visualization.plot_sensitivity import (
+    plot_gateway_sla_sensitivity,
+    plot_failover_and_ccf_sensitivity,
+    plot_architectural_diminishing_returns,
+    generate_all_sensitivity_diagrams,
+)
 
 __all__ = [
     "draw_rbd_scenario_1",
@@ -36,4 +42,8 @@ __all__ = [
     "plot_downtime_histograms",
     "plot_simulation_subsystem_breakdown",
     "generate_all_monte_carlo_diagrams",
+    "plot_gateway_sla_sensitivity",
+    "plot_failover_and_ccf_sensitivity",
+    "plot_architectural_diminishing_returns",
+    "generate_all_sensitivity_diagrams",
 ]
