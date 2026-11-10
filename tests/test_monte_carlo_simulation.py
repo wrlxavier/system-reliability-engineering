@@ -190,6 +190,22 @@ def test_component_parallel_mode():
     assert res.metrics.mean_availability > 0.999
 
 
+def test_get_scenario_rates_defaults_and_mode_alias():
+    """Verify get_scenario_rates default signature, mode alias, and SLA calibration."""
+    r_default = get_scenario_rates(2)
+    r_topo = get_scenario_rates(2, topology_mode="sla_subsystem")
+    r_mode = get_scenario_rates(2, mode="sla_subsystem")
+    assert r_default == r_topo == r_mode
+
+    # In sla_subsystem, DB failure rate matches 99.95% SLA (mu = 1.0, A = 0.9995)
+    # lambda = 1.0 * (1 - 0.9995) / 0.9995 = 0.0005 / 0.9995 ~ 0.00050025 h^-1
+    assert math.isclose(r_default["DB"][0], 0.00050025, rel_tol=1e-4)
+
+    # In component_parallel mode, baseline single-instance failure rate is retained
+    r_parallel = get_scenario_rates(2, mode="component_parallel")
+    assert math.isclose(r_parallel["DB"][0], DEFAULT_BLOCKS["DB"].lambda_base, rel_tol=1e-8)
+
+
 def test_export_simulation_metrics_csv(tmp_path):
     """Verify automated CSV export conforming to acceptance criteria."""
     cfg = SimulationConfig(seed=DEFAULT_SEED, num_replicas=500, horizon_hours=HOURS_PER_YEAR)

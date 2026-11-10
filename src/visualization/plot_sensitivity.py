@@ -59,6 +59,16 @@ def _save_figure_dual_formats(
 
     fig.savefig(pdf_path, format="pdf", bbox_inches="tight")
     fig.savefig(png_path, format="png", dpi=dpi, bbox_inches="tight")
+
+    # Also save standard sensitivity_* aliases in reports/figures/
+    if not base_name.startswith("sensitivity_"):
+        alias_png = output_dir / f"sensitivity_{base_name}.png"
+        fig.savefig(alias_png, format="png", dpi=dpi, bbox_inches="tight")
+        if base_name.endswith("_sensitivity"):
+            short_name = base_name[:-12]
+            short_alias = output_dir / f"sensitivity_{short_name}.png"
+            fig.savefig(short_alias, format="png", dpi=dpi, bbox_inches="tight")
+
     return pdf_path, png_path
 
 

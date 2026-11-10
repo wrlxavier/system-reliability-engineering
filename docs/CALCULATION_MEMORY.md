@@ -56,6 +56,17 @@ $$\text{Ingress} \longrightarrow [\text{LB}] \longrightarrow \begin{bmatrix} \te
 - **Application Multi-AZ:** $A_{2,\text{red}} = 0.9999$ (AWS EC2 Multi-AZ SLA [11], [14]; parallel theoretical: $1 - 0.005^2 = 0.999975$).
 - **Database Multi-AZ HA:** $A_{3,\text{red}} = 0.9995$ (AWS RDS Multi-AZ SLA [12], [15], accounting for synchronous replication and failover overhead).
 
+> [!NOTE]
+> **Technical Justification: Multi-AZ Database Modeling (`sla_subsystem` vs. Pure Parallel)**  
+> In the analytical and simulation formulations, the redundant database tier is parameterized with $A_{3,\text{red}} = 0.9995$ ($D = 4.38\text{ h/year}$), corresponding to official cloud Service Level Agreements for managed Multi-AZ deployments (e.g., AWS RDS Multi-AZ SLA [12], Google Cloud Cloud SQL HA [15]).
+>
+> A naive combinatorial assumption of two purely independent parallel database instances would yield $A_{\text{DB,parallel}} = 1 - (1 - A_3)^2 = 1 - (0.005)^2 = 0.999975$ ($D \approx 1.33\text{ h/year}$). However, this assumption is physically and architecturally invalid for transactional relational database management systems (RDBMS) because:
+> 1. **Synchronous State Replication:** Write transactions require synchronous commit protocols across Availability Zones, meaning instances share synchronous replication channels and state dependencies.
+> 2. **Failure Detection and Heartbeat Latency:** When the primary DB node fails, automated health checks require 30 to 60 seconds to declare an unrecoverable failure and prevent split-brain conditions.
+> 3. **Failover Promotion and DNS Propagation:** Promoting the standby replica to primary and repointing client connection pools (updating DNS CNAME records or cluster endpoints) introduces an unavoidable operational interruption of 60 to 120 seconds.
+>
+> Therefore, adopting the contractual SLA benchmark of $99.95\%$ (`sla_subsystem` mode) realistically incorporates the intrinsic switching and failover penalties of stateful transactional persistence, avoiding overly optimistic availability estimates.
+
 $$A_{\text{red}} = A_{\text{LB}} \cdot A_{2,\text{red}} \cdot A_{3,\text{red}} \cdot A_{\text{PGW}} = 0.9999 \times 0.9999 \times 0.9995 \times 0.9995$$
 
 $$A_{\text{red}} = (0.9999)^2 \times (0.9995)^2 = 0.99980001 \times 0.99900025 = 0.9988004599 \implies \mathbf{99.880\%}$$
@@ -217,6 +228,12 @@ The comparative gain achieved by migrating from Scenario 1 (Baseline Pure Series
   $$\frac{\text{MTTF}_{\text{red}}}{\text{MTTF}_{\text{base}}} = \frac{106.057027}{60.694649} = \mathbf{1.7474\times}$$
 
 At $t = \text{MTTF}_{\text{base}} = 60.69\text{ h}$, the redundant system preserves a survival probability of $R_{\text{red}}(60.69) = \mathbf{61.20\%}$ (compared to only $36.79\%$ for the baseline series).
+
+> [!IMPORTANT]
+> **Boundary Premise: Mission Reliability $R(t)$ vs. Steady-State Availability $A$**  
+> The analytical derivation of $R_{\text{red}}(t)$ and the resulting $\text{MTTF}_{\text{red}} = 106.06\text{ hours}$ model a non-repairable mission profile **without maintenance or component restoration during the mission interval $[0, t]$**. That is, $R(t)$ measures the probability that no single unrecovered system crash occurs up to time $t$.  
+>  
+> In continuous commercial cloud operations, automated self-healing, instance replacement, and online replica rebuilds occur continuously. Thus, $\text{MTTF}_{\text{red}}$ represents a **conservative lower bound** for uninterrupted mission capability (useful for uninterrupted transaction batch windows or peak shopping intervals like Black Friday), and must not be confused with steady-state operational availability ($A_{\text{red}} = 99.88\%$), which accounts for infinite renewal cycles and yields an expected annual uptime of $8749.49\text{ hours/year}$ in the presence of continuous automated repairs.
 
 
 ### 5.6 Scenario 3 Expansion (Multi-Gateway Extension)
@@ -462,18 +479,18 @@ The table below contrasts the exact analytical solutions against the stochastic 
 | Evaluation Metric | Scenario 1 (Baseline Series) | Scenario 2 (Multi-AZ Series-Parallel) | Scenario 3 (Multi-Gateway Expansion) | Acceptance Criterion |
 | :--- | :---: | :---: | :---: | :---: |
 | **Analytical Availability ($A$)** | **$98.9431\%$** ($0.98943103$) | **$99.8800\%$** ($0.99880046$) | **$99.9300\%$** ($0.99929986$) | Theoretical Benchmark |
-| **Simulated Availability ($\hat{A}$)** | **$98.9425\%$** ($0.98942474$) | **$99.8802\%$** ($0.99880240$) | **$99.9294\%$** ($0.99929430$) | Point Estimator |
-| **Availability 95% Confidence Interval** | **$[98.9399\%, 98.9451\%]$** | **$[99.8794\%, 99.8811\%]$** | **$[99.9287\%, 99.9301\%]$** | $A \in \text{CI}_{95\%}$ (Contains Theoretical) |
-| **Availability Relative Error ($\varepsilon_{\text{rel}}$)** | **$0.00064\%$** | **$0.00019\%$** | **$0.00056\%$** | **$< 0.05\%$ (Passed)** |
+| **Simulated Availability ($\hat{A}$)** | **$98.9425\%$** ($0.98942474$) | **$99.8802\%$** ($0.99880240$) | **$99.9293\%$** ($0.99929328$) | Point Estimator |
+| **Availability 95% Confidence Interval** | **$[98.9399\%, 98.9451\%]$** | **$[99.8794\%, 99.8811\%]$** | **$[99.9286\%, 99.9300\%]$** | $A \in \text{CI}_{95\%}$ (Contains Theoretical) |
+| **Availability Relative Error ($\varepsilon_{\text{rel}}$)** | **$0.00064\%$** | **$0.00019\%$** | **$0.000659\%$** | **$< 0.05\%$ (Passed)** |
 | **Analytical Downtime ($D$)** | **$92.58\text{ h/year}$** | **$10.51\text{ h/year}$** | **$6.13\text{ h/year}$** | Theoretical Benchmark |
-| **Simulated Downtime ($\hat{D}$)** | **$92.64\text{ h/year}$** | **$10.49\text{ h/year}$** | **$6.18\text{ h/year}$** | Point Estimator |
-| **Downtime 95% Confidence Interval** | **$[92.41\text{ h}, 92.87\text{ h}]$** | **$[10.42\text{ h}, 10.56\text{ h}]$** | **$[6.12\text{ h}, 6.24\text{ h}]$** | $D \in \text{CI}_{95\%}$ (Contains Theoretical) |
-| **Downtime Sample Std Dev ($s_D$)** | $11.55\text{ h}$ | $3.74\text{ h}$ | $3.19\text{ h}$ | Empirical Sample Dispersion |
-| **Standard Error of Mean ($\text{SE}$)** | $0.115\text{ h}$ ($6.93\text{ min}$) | $0.037\text{ h}$ ($2.24\text{ min}$) | $0.032\text{ h}$ ($1.91\text{ min}$) | $\text{SE} = s / \sqrt{10^4}$ |
-| **Expected Failure Events / Year** | $142.93\text{ events}$ | $18.43\text{ events}$ | $7.94\text{ events}$ | Modeled Poisson/Renewal Intensity |
-| **Execution Wall-Clock Time** | **$1.72\text{ seconds}$** | **$0.28\text{ seconds}$** | **$0.25\text{ seconds}$** | **$< 60\text{ seconds (Passed)}$** |
+| **Simulated Downtime ($\hat{D}$)** | **$92.64\text{ h/year}$** | **$10.49\text{ h/year}$** | **$6.19\text{ h/year}$** ($6.1909\text{ h}$) | Point Estimator |
+| **Downtime 95% Confidence Interval** | **$[92.41\text{ h}, 92.87\text{ h}]$** | **$[10.42\text{ h}, 10.56\text{ h}]$** | **$[6.13\text{ h}, 6.25\text{ h}]$** | $D \in \text{CI}_{95\%}$ (Contains Theoretical) |
+| **Downtime Sample Std Dev ($s_D$)** | $11.55\text{ h}$ | $3.74\text{ h}$ | $3.20\text{ h}$ | Empirical Sample Dispersion |
+| **Standard Error of Mean ($\text{SE}$)** | $0.115\text{ h}$ ($6.93\text{ min}$) | $0.037\text{ h}$ ($2.24\text{ min}$) | $0.032\text{ h}$ ($1.92\text{ min}$) | $\text{SE} = s / \sqrt{10^4}$ |
+| **Expected Failure Events / Year** | $142.93\text{ events}$ | $18.43\text{ events}$ | $9.71\text{ events}$ | Modeled Poisson/Renewal Intensity |
+| **Execution Wall-Clock Time** | **$1.81\text{ seconds}$** | **$0.29\text{ seconds}$** | **$0.18\text{ seconds}$** | **$< 60\text{ seconds (Passed)}$** |
 
-*Validation Conclusion:* For all architectural scenarios, the analytical benchmark lies strictly within the empirical 95% confidence interval, and the availability relative error is two orders of magnitude below the $0.05\%$ threshold ($\le 0.00064\%$), confirming the mathematical and computational integrity of the stochastic simulation engine.
+*Validation Conclusion:* For all architectural scenarios, the analytical benchmark lies strictly within the empirical 95% confidence interval, and the availability relative error is two orders of magnitude below the $0.05\%$ threshold ($\le 0.000659\%$), confirming the mathematical and computational integrity of the stochastic simulation engine.
 
 
 ### 8.6 Asymptotic Convergence Analysis and Strong Law of Large Numbers (SLLN)

@@ -321,18 +321,41 @@ def get_scenario_rates(
     scenario_id: int,
     blocks: Dict[str, BlockParameters] = DEFAULT_BLOCKS,
     topology_mode: str = "sla_subsystem",
+    mode: Optional[str] = None,
 ) -> Dict[str, Tuple[float, float]]:
-    """Extract transition rates (lambda, mu) for each subsystem in a scenario.
+    """Extract transition rates (lambda, mu) for each subsystem in an architectural scenario.
 
-    Args:
-        scenario_id: 1 (Baseline), 2 (Multi-AZ), or 3 (Multi-Gateway).
-        blocks: Dictionary of BlockParameters.
-        topology_mode: 'sla_subsystem' uses contractual scenario SLAs;
-                       'component_parallel' uses baseline component unit rates.
+    Parameters
+    ----------
+    scenario_id : int
+        Scenario identifier:
+        - 1: Baseline Pure Series (LB -> App -> DB -> PGW).
+        - 2: Multi-AZ Series-Parallel (LB -> [App1 || App2] -> [DB1 || DB2] -> PGW).
+        - 3: Multi-Gateway Expansion (LB -> [App1 || App2] -> [DB1 || DB2] -> [PGW_A || PGW_B]).
+    blocks : Dict[str, BlockParameters], optional
+        Dictionary mapping subsystem codes to nominal parameters. Defaults to DEFAULT_BLOCKS.
+    topology_mode : str, default="sla_subsystem"
+        Simulation rate calibration paradigm:
+        - "sla_subsystem" (Nominal Engineering Standard):
+          Calibrates transition rates using official cloud provider multi-zone Service
+          Level Agreements (e.g., AWS RDS Multi-AZ SLA of 99.95%, AWS EC2 Multi-AZ 99.99%).
+          For stateful transactional database tiers, this realistically captures internal
+          heartbeat timeout latencies, replica promotion, and DNS CNAME propagation overhead
+          (expected annual downtime D ~ 4.38 h/yr), preventing the physically unrealistic
+          optimism of zero-latency switching.
+        - "component_parallel" (Theoretical Idealized):
+          Assumes purely independent components in active-active parallel redundancy without
+          any failover or state synchronization penalties, using baseline individual failure rates
+          (yielding theoretical 1 - (1 - A_DB)^2 => 99.9975% with D ~ 1.33 h/yr).
+    mode : str, optional
+        Alias for `topology_mode` for API compatibility. If provided, overrides `topology_mode`.
 
-    Returns:
-        Dict mapping subsystem code to (lambda_rate, mu_rate).
+    Returns
+    -------
+    Dict[str, Tuple[float, float]]
+        Mapping of subsystem block code to (lambda_rate, mu_rate) in units of h^-1.
     """
+    selected_mode = mode if mode is not None else topology_mode
     rates: Dict[str, Tuple[float, float]] = {}
 
     if scenario_id == 1:
@@ -342,7 +365,7 @@ def get_scenario_rates(
             rates[code] = (lam, mu)
 
     elif scenario_id == 2:
-        if topology_mode == "component_parallel":
+        if selected_mode == "component_parallel":
             # Baseline unit rates used for explicit parallel units
             for code, b in blocks.items():
                 mu = 1.0 / b.mttr_hours
@@ -373,7 +396,7 @@ def get_scenario_rates(
             rates["PGW"] = (b_pgw.lambda_base, 1.0 / b_pgw.mttr_hours)
 
     elif scenario_id == 3:
-        if topology_mode == "component_parallel":
+        if selected_mode == "component_parallel":
             for code, b in blocks.items():
                 mu = 1.0 / b.mttr_hours
                 lam = b.lambda_base
