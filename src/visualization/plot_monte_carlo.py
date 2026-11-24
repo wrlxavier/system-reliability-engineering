@@ -3,10 +3,10 @@ Publication-Grade Visualizations for Monte Carlo Stochastic Simulation.
 
 This module generates publication-grade vector graphics (PDF) and high-resolution raster
 images (PNG, 300 DPI) illustrating:
-1. Cumulative asymptotic convergence curves of availability estimators against iterations (n in [1, 10^4]).
-2. Empirical annual downtime distributions with superimposed mean, median, and 95th percentile markers.
-3. Subsystem downtime breakdown and Pareto cross-validation contrasting analytical benchmarks against
-   simulated empirical averages.
+1. Cumulative convergence curves of availability estimators against iterations (n in [1, 10^4]).
+2. Simulated annual downtime distributions with superimposed mean, median, and 95th percentile markers.
+3. Subsystem downtime breakdown cross-validation contrasting analytical benchmarks against
+   simulated averages.
 """
 
 import math
@@ -16,7 +16,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 from src.models.analytical import (
     DEFAULT_BLOCKS,
@@ -97,11 +96,11 @@ def plot_monte_carlo_convergence(
     save_individual: bool = True,
     figsize: Tuple[float, float] = (15.0, 11.0),
 ) -> plt.Figure:
-    """Plot cumulative asymptotic convergence curves of availability estimators.
+    """Plot cumulative convergence curves of Monte Carlo availability estimators.
 
     Illustrates running cumulative mean availability A_hat(n) as a function of simulation
     replications n in [1, 10^4], alongside the closed-form analytical benchmark line
-    and the 95% bilateral confidence envelope.
+    and the 95% Student's t confidence envelope.
 
     Args:
         results: Simulation results (single result, dict of results by scenario_id, or None).
@@ -150,7 +149,7 @@ def plot_monte_carlo_convergence(
         n_replicas = len(res.availability)
         x_vals = np.arange(1, n_replicas + 1)
 
-        # Plot 95% confidence envelope (omitting first 10 steps to avoid infinite boundary spikes)
+        # Plot 95% Student's t confidence envelope (omitting first 10 steps to avoid wide initial spikes)
         start_step = min(10, n_replicas - 1)
         ax.fill_between(
             x_vals[start_step:],
@@ -158,7 +157,7 @@ def plot_monte_carlo_convergence(
             (cum_mean + margin)[start_step:] * 100.0,
             color=color,
             alpha=0.18,
-            label=r"Empirical $95\%$ Confidence Envelope $\hat{A}(n) \pm 1.96 \cdot \text{SE}(n)$",
+            label=r"95% Confidence Interval ($t$-Student): $\hat{A}(n) \pm t_{n-1, 0.975} \cdot \mathrm{SE}(n)$",
             zorder=2,
         )
 
@@ -184,7 +183,7 @@ def plot_monte_carlo_convergence(
 
         # Format axes
         ax.set_title(
-            f"Scenario {s_id}: {res.name} — Asymptotic Convergence ($N = {n_replicas:,}$ Replications)",
+            f"{res.name} — Convergence ($N = {n_replicas:,}$ Replications)",
             fontsize=12,
             fontweight="bold",
             pad=8,
@@ -229,7 +228,7 @@ def plot_monte_carlo_convergence(
     axes[-1].set_xlim(1, n_replicas)
 
     fig.suptitle(
-        "Monte Carlo Asymptotic Convergence and Theoretical SLA Cross-Validation",
+        "Monte Carlo Convergence and Analytical Availability Cross-Validation",
         fontsize=14,
         fontweight="bold",
         y=0.995,
@@ -259,7 +258,7 @@ def plot_monte_carlo_convergence(
                 (cum_mean + margin)[start_step:] * 100.0,
                 color=color,
                 alpha=0.18,
-                label=r"Empirical $95\%$ Confidence Envelope",
+                label=r"95% Confidence Interval ($t$-Student)",
             )
             ax_single.plot(
                 x_vals,
@@ -280,7 +279,7 @@ def plot_monte_carlo_convergence(
             ax_single.set_ylim(center_y - delta_y, center_y + delta_y)
             ax_single.set_xlim(1, n_replicas)
             ax_single.set_title(
-                f"Scenario {s_id}: {res.name} — Asymptotic Convergence ($N = {n_replicas:,}$)",
+                f"{res.name} — Convergence ($N = {n_replicas:,}$)",
                 fontsize=11.5,
                 fontweight="bold",
                 pad=8,
@@ -302,12 +301,10 @@ def plot_downtime_histograms(
     save_individual: bool = True,
     figsize: Tuple[float, float] = (16.0, 5.5),
 ) -> plt.Figure:
-    """Plot empirical annual downtime distributions with superimposed mean and 95th percentile markers.
+    """Plot simulated annual downtime distributions with mean, median, and 95th percentile markers.
 
-    Illustrates the empirical probability density and frequency distribution of annual downtime
-    accumulated over N = 10^4 simulated years for Scenario 1, Scenario 2, and Scenario 3.
-    Superimposes mean (D_hat), median (p50), 95th percentile (D_0.95 SLA Risk Boundary),
-    and smooth KDE profile.
+    Illustrates the empirical probability density histogram of annual downtime
+    accumulated over N simulated years for Scenario 1, Scenario 2, and Scenario 3.
 
     Args:
         results: Simulation results (single result, dict of results by scenario_id, or None).
@@ -361,24 +358,9 @@ def plot_downtime_histograms(
             alpha=0.68,
             edgecolor="#1A252C",
             linewidth=0.8,
-            label="Empirical Density",
+            label="Simulated Histogram",
             zorder=3,
         )
-
-        # Overlay smooth KDE curve
-        try:
-            kde = stats.gaussian_kde(downtimes)
-            x_kde = np.linspace(float(np.min(downtimes)), float(np.max(downtimes)), 250)
-            ax.plot(
-                x_kde,
-                kde(x_kde),
-                color="#1A252C",
-                linewidth=1.9,
-                label="KDE Profile",
-                zorder=4,
-            )
-        except Exception:
-            pass
 
         # Superimpose Mean marker
         ax.axvline(
@@ -400,7 +382,7 @@ def plot_downtime_histograms(
             zorder=5,
         )
 
-        # Superimpose 95th Percentile marker (Value-at-Risk boundary)
+        # Superimpose 95th Percentile marker
         ax.axvline(
             summary.p95,
             color=PERCENTILE_95_COLOR,
@@ -412,7 +394,7 @@ def plot_downtime_histograms(
 
         # Styling
         ax.set_title(
-            f"Scenario {s_id}: {res.name}\nAnnual Downtime Distribution",
+            f"{res.name}\nAnnual Downtime Distribution",
             fontsize=11.5,
             fontweight="bold",
             pad=8,
@@ -451,8 +433,9 @@ def plot_downtime_histograms(
         )
         ax.legend(loc="upper right", fontsize=8.2, framealpha=0.90)
 
+    n_total_years = len(results_dict[scenario_ids[0]].downtime_hours)
     fig.suptitle(
-        "Empirical Annual Downtime Distributions and SLA Risk Thresholds (N = 10,000 Years)",
+        f"Simulated Annual Downtime Distributions (N = {n_total_years:,} Years)",
         fontsize=13.5,
         fontweight="bold",
         y=1.02,
@@ -479,21 +462,15 @@ def plot_downtime_histograms(
                 alpha=0.70,
                 edgecolor="#1A252C",
                 linewidth=0.8,
-                label="Empirical Density",
+                label="Simulated Histogram",
             )
-            try:
-                kde = stats.gaussian_kde(downtimes)
-                x_kde = np.linspace(float(np.min(downtimes)), float(np.max(downtimes)), 250)
-                ax_single.plot(x_kde, kde(x_kde), color="#1A252C", linewidth=1.9, label="KDE Profile")
-            except Exception:
-                pass
 
             ax_single.axvline(summary.mean, color="#1A252C", linestyle="--", linewidth=1.8, label=rf"Mean $\hat{{D}} = {summary.mean:.2f}\text{{ h}}$")
             ax_single.axvline(summary.median, color=MEDIAN_LINE_COLOR, linestyle=":", linewidth=1.6, label=rf"Median $p_{{50}} = {summary.median:.2f}\text{{ h}}$")
             ax_single.axvline(summary.p95, color=PERCENTILE_95_COLOR, linestyle="-.", linewidth=2.0, label=rf"95th %ile $D_{{0.95}} = {summary.p95:.2f}\text{{ h}}$")
 
             ax_single.set_title(
-                f"Scenario {s_id}: {res.name} — Annual Downtime Distribution ($N = {summary.sample_size:,}$)",
+                f"{res.name} — Annual Downtime Distribution ($N = {summary.sample_size:,}$)",
                 fontsize=11.5,
                 fontweight="bold",
                 pad=8,
@@ -516,7 +493,8 @@ def plot_simulation_subsystem_breakdown(
 ) -> plt.Figure:
     """Plot subsystem downtime breakdown contrasting analytical benchmarks with Monte Carlo estimates.
 
-    Demonstrates that the stochastic simulation confirms the Pareto principle:
+    Demonstrates that the stochastic simulation confirms the analytical subsystem
+    downtime contributions and bottleneck shift:
     - In Scenario 1: App and DB represent >94% of downtime.
     - In Scenario 2: App downtime collapses by 98%, shifting the dominant bottleneck to DB and external PGW.
     - In Scenario 3: External PGW outage is eliminated, leaving DB as the primary residual bottleneck.
@@ -576,6 +554,7 @@ def plot_simulation_subsystem_breakdown(
 
         ax1.set_title("Scenario 1: Baseline Architecture\nSubsystem Downtime Contribution", fontsize=11, fontweight="bold", pad=8)
         ax1.set_ylabel("Annual Downtime (hours/year)", fontsize=10.5, fontweight="bold")
+        ax1.set_ylim(0, max(max(analytical_s1), max(simulated_s1)) * 1.25)
         ax1.set_xticks(x_indices)
         ax1.set_xticklabels(blocks, fontsize=10, fontweight="bold")
         ax1.grid(axis="y", linestyle="--", alpha=0.5, color="#BDC3C7")
@@ -625,6 +604,7 @@ def plot_simulation_subsystem_breakdown(
 
         ax2.set_title("Scenario 2: Multi-AZ Series-Parallel\nBottleneck Shift to DB & PGW", fontsize=11, fontweight="bold", pad=8)
         ax2.set_ylabel("Annual Downtime (hours/year)", fontsize=10.5, fontweight="bold")
+        ax2.set_ylim(0, max(max(analytical_s2), max(simulated_s2)) * 1.25)
         ax2.set_xticks(x_indices)
         ax2.set_xticklabels(blocks, fontsize=10, fontweight="bold")
         ax2.grid(axis="y", linestyle="--", alpha=0.5, color="#BDC3C7")
@@ -652,7 +632,7 @@ def plot_simulation_subsystem_breakdown(
     )
     fig.tight_layout()
 
-    _save_figure_dual_formats(fig, "monte_carlo_pareto_validation", out_dir)
+    _save_figure_dual_formats(fig, "monte_carlo_subsystem_validation", out_dir)
     return fig
 
 
@@ -665,7 +645,7 @@ def generate_all_monte_carlo_diagrams(
     Produces:
     - monte_carlo_convergence.pdf / .png
     - downtime_histogram.pdf / .png
-    - monte_carlo_pareto_validation.pdf / .png
+    - monte_carlo_subsystem_validation.pdf / .png
     - Individual scenario convergence and histogram figures
 
     Args:
@@ -691,8 +671,8 @@ def generate_all_monte_carlo_diagrams(
     fig_hist = plot_downtime_histograms(results_dict, output_dir=out_dir, save_individual=True)
     plt.close(fig_hist)
 
-    fig_pareto = plot_simulation_subsystem_breakdown(results_dict, output_dir=out_dir)
-    plt.close(fig_pareto)
+    fig_sub = plot_simulation_subsystem_breakdown(results_dict, output_dir=out_dir)
+    plt.close(fig_sub)
 
     created_files: Dict[str, Path] = {}
     expected_names = [
@@ -700,8 +680,8 @@ def generate_all_monte_carlo_diagrams(
         "monte_carlo_convergence.png",
         "downtime_histogram.pdf",
         "downtime_histogram.png",
-        "monte_carlo_pareto_validation.pdf",
-        "monte_carlo_pareto_validation.png",
+        "monte_carlo_subsystem_validation.pdf",
+        "monte_carlo_subsystem_validation.png",
         "monte_carlo_convergence_scenario_1.pdf",
         "monte_carlo_convergence_scenario_1.png",
         "monte_carlo_convergence_scenario_2.pdf",

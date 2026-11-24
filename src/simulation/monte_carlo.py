@@ -1,12 +1,13 @@
 """
-Discrete-Event Monte Carlo Simulation Engine and Statistical Inference.
+Monte Carlo Simulation Engine and Statistical Estimation.
 
-This module implements the stochastic discrete-event simulation engine for
-cloud payment architectures over an annual mission horizon (T = 8760 hours).
-It models component state transitions under alternating renewal theory with
-TTF ~ Exp(lambda) and TTR ~ Exp(mu), computes point estimators (A_hat),
-bilateral 95% confidence intervals, and exports automated empirical metrics
-(Milestone 2, Issues #3 & #4).
+This module implements the stochastic simulation engine for cloud payment
+architectures over an annual operational horizon (T = 8760 hours).
+It simulates continuous-time failure and repair cycles using inverse transform
+sampling from exponential distributions (TTF ~ Exp(lambda), TTR ~ Exp(mu)),
+performs union/intersection of outage intervals to avoid double counting,
+computes availability point estimators (A_hat) and Student's t 95% confidence
+intervals, and exports summary metrics to CSV.
 """
 
 from dataclasses import dataclass, field
@@ -141,7 +142,7 @@ class ScenarioSimulationResult:
 
 @dataclass
 class EmpiricalDistributionSummary:
-    """Empirical distribution metrics and risk quantiles for simulation outputs.
+    """Descriptive statistics and percentiles for simulated annual downtime.
 
     Attributes:
         scenario_id: Scenario identifier (1, 2, or 3).
@@ -152,12 +153,10 @@ class EmpiricalDistributionSummary:
         sem: Standard error of the mean (std / sqrt(N)).
         median: 50th percentile (median).
         p90: 90th percentile.
-        p95: 95th percentile (Value-at-Risk / 95% SLA boundary).
-        p99: 99th percentile (extreme tail risk).
+        p95: 95th percentile.
+        p99: 99th percentile.
         min_val: Minimum observed sample value.
         max_val: Maximum observed sample value.
-        skewness: Fisher-Pearson coefficient of skewness.
-        kurtosis: Excess kurtosis (Fisher definition).
     """
     scenario_id: int
     scenario_name: str
@@ -171,8 +170,6 @@ class EmpiricalDistributionSummary:
     p99: float
     min_val: float
     max_val: float
-    skewness: float
-    kurtosis: float
 
 
 def sample_exponential_variable(
@@ -196,15 +193,16 @@ def sample_exponential_variable(
     return generator.exponential(scale=1.0 / rate, size=size)
 
 
-def simulate_component_renewal(
+def simulate_component_cycles(
     lambda_rate: float,
     mu_rate: float,
     horizon_hours: float = DEFAULT_HORIZON_HOURS,
     rng: Optional[np.random.Generator] = None,
 ) -> List[Tuple[float, float]]:
-    """Simulate alternating renewal process for a repairable unit over horizon T.
+    """Simulate failure and repair cycles for a repairable unit over horizon T.
 
-    The component starts at t = 0 in the UP (operational) state:
+    The component starts at t = 0 in the UP (operational) state and alternates
+    between operational and repair intervals sampled by inverse transform:
         - Operational duration: TTF ~ Exp(lambda)
         - Repair duration: TTR ~ Exp(mu)
         - Cycle repeats until mission horizon T is reached.
@@ -241,8 +239,8 @@ def merge_outage_intervals(
 ) -> List[Tuple[float, float]]:
     """Merge overlapping or contiguous outage intervals into disjoint intervals.
 
-    For components in series, the system outage is the union of individual outages.
-    This function computes the exact union in O(M log M) time.
+    For components in series, the system outage is the union of individual outages
+    over [0, T], avoiding double counting when failures overlap temporally.
 
     Args:
         intervals: List of (start, end) tuples.
@@ -267,7 +265,7 @@ def intersect_two_interval_lists(
     list1: List[Tuple[float, float]],
     list2: List[Tuple[float, float]],
 ) -> List[Tuple[float, float]]:
-    """Compute the intersection of two disjoint sorted interval lists in O(N1 + N2).
+    """Compute the temporal intersection of two disjoint sorted interval lists.
 
     For active 1-out-of-2 parallel redundant subsystems, the subsystem is DOWN
     only when both units are simultaneously down (temporal overlap).
@@ -449,8 +447,9 @@ def compute_simulation_metrics(
         - Mean availability estimator: A_hat = (1/N) * sum(A_k)
         - Sample standard deviation: s_A = sqrt(sum((A_k - A_hat)^2) / (N - 1))
         - Standard error of the mean: SE(A_hat) = s_A / sqrt(N)
-        - Bilateral 95% Confidence Interval (Student's t / Normal):
-            CI_95(A_hat) = [A_hat - z * SE(A_hat), A_hat + z * SE(A_hat)]
+        - Bilateral 95% Confidence Interval (Student's t distribution with N - 1 df):
+            CI_95(A_hat) = [A_hat - t_{N-1, 1-alpha/2} * SE(A_hat),
+                            A_hat + t_{N-1, 1-alpha/2} * SE(A_hat)]
         - Relative percentage error:
             eps_A = |A_hat - A_theoretical| / A_theoretical * 100%
 
@@ -537,13 +536,14 @@ def run_monte_carlo_simulation(
         1. Initialize random number generator with fixed seed (e.g. 2026).
         2. Set up component failure and repair parameters.
         3. For each of the N annual mission horizons (T = 8760 h):
-           - Sample alternating renewal trajectories TTF ~ Exp(lambda), TTR ~ Exp(mu).
+           - Sample exponential failure and repair cycles via inverse transform
+             (TTF ~ Exp(lambda), TTR ~ Exp(mu)).
            - Apply topological state evaluation:
              * Pure series (Scenario 1): Union of all component outages.
              * Series-parallel (Scenario 2): Active redundancy intersection / SLA rates.
              * Multi-gateway (Scenario 3): Dual-gateway redundancy / SLA rates.
            - Record system downtime, availability, and failure event count.
-        4. Compute statistical estimators, bilateral 95% CIs, and relative error.
+        4. Compute statistical estimators, bilateral 95% Student's t CIs, and relative error.
 
     Args:
         scenario_id: 1, 2, or 3.
@@ -591,29 +591,29 @@ def run_monte_carlo_simulation(
         # Explicit component-level parallel simulation
         for k in range(n_reps):
             # LB: single unit
-            lb_down = simulate_component_renewal(rates["LB"][0], rates["LB"][1], t_horiz, rng)
+            lb_down = simulate_component_cycles(rates["LB"][0], rates["LB"][1], t_horiz, rng)
             sub_downtimes["LB"][k] = total_outage_duration(lb_down)
 
             # App: 2 parallel units
-            app1_down = simulate_component_renewal(rates["App"][0], rates["App"][1], t_horiz, rng)
-            app2_down = simulate_component_renewal(rates["App"][0], rates["App"][1], t_horiz, rng)
+            app1_down = simulate_component_cycles(rates["App"][0], rates["App"][1], t_horiz, rng)
+            app2_down = simulate_component_cycles(rates["App"][0], rates["App"][1], t_horiz, rng)
             app_tier_down = intersect_two_interval_lists(app1_down, app2_down)
             sub_downtimes["App"][k] = total_outage_duration(app_tier_down)
 
             # DB: 2 parallel units
-            db1_down = simulate_component_renewal(rates["DB"][0], rates["DB"][1], t_horiz, rng)
-            db2_down = simulate_component_renewal(rates["DB"][0], rates["DB"][1], t_horiz, rng)
+            db1_down = simulate_component_cycles(rates["DB"][0], rates["DB"][1], t_horiz, rng)
+            db2_down = simulate_component_cycles(rates["DB"][0], rates["DB"][1], t_horiz, rng)
             db_tier_down = intersect_two_interval_lists(db1_down, db2_down)
             sub_downtimes["DB"][k] = total_outage_duration(db_tier_down)
 
             # PGW: single unit in S2, 2 parallel units in S3
             if scenario_id == 2:
-                pgw_down = simulate_component_renewal(rates["PGW"][0], rates["PGW"][1], t_horiz, rng)
+                pgw_down = simulate_component_cycles(rates["PGW"][0], rates["PGW"][1], t_horiz, rng)
                 sub_downtimes["PGW"][k] = total_outage_duration(pgw_down)
                 all_down = lb_down + app_tier_down + db_tier_down + pgw_down
             else:
-                pgw1_down = simulate_component_renewal(rates["PGW"][0], rates["PGW"][1], t_horiz, rng)
-                pgw2_down = simulate_component_renewal(rates["PGW"][0], rates["PGW"][1], t_horiz, rng)
+                pgw1_down = simulate_component_cycles(rates["PGW"][0], rates["PGW"][1], t_horiz, rng)
+                pgw2_down = simulate_component_cycles(rates["PGW"][0], rates["PGW"][1], t_horiz, rng)
                 pgw_tier_down = intersect_two_interval_lists(pgw1_down, pgw2_down)
                 sub_downtimes["PGW"][k] = total_outage_duration(pgw_tier_down)
                 all_down = lb_down + app_tier_down + db_tier_down + pgw_tier_down
@@ -626,7 +626,7 @@ def run_monte_carlo_simulation(
         for k in range(n_reps):
             all_down: List[Tuple[float, float]] = []
             for code, (lam, mu) in rates.items():
-                comp_down = simulate_component_renewal(lam, mu, t_horiz, rng)
+                comp_down = simulate_component_cycles(lam, mu, t_horiz, rng)
                 sub_downtimes[code][k] = total_outage_duration(comp_down)
                 all_down.extend(comp_down)
 
@@ -760,7 +760,7 @@ def export_simulation_metrics_to_csv(
 
 
 def compute_convergence_series(availabilities: np.ndarray) -> np.ndarray:
-    """Compute running cumulative mean sequence for asymptotic convergence analysis.
+    """Compute running cumulative mean sequence for Monte Carlo convergence analysis.
 
     Formula:
         A_cum(n) = (1 / n) * sum_{k=1}^n A_k, for n in [1, N]
@@ -780,12 +780,12 @@ def compute_running_statistics(
     samples: np.ndarray,
     confidence_level: float = 0.95,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute running cumulative sample mean, standard deviation, and confidence half-width.
+    """Compute running cumulative sample mean, standard deviation, and Student's t confidence half-width.
 
     Formulas:
         mean(n) = (1 / n) * sum_{k=1}^n x_k
         var(n) = (1 / (n - 1)) * [sum x_k^2 - n * mean(n)^2]  (for n >= 2)
-        margin(n) = z_{1 - alpha/2} * std(n) / sqrt(n)
+        margin(n) = t_{n-1, 1 - alpha/2} * std(n) / sqrt(n)
 
     Args:
         samples: 1D array of sample values of length N.
@@ -811,10 +811,13 @@ def compute_running_statistics(
     if n > 0:
         cum_std[0] = 0.0
 
-    z_critical = stats.norm.ppf(1.0 - (1.0 - confidence_level) / 2.0)
+    alpha = 1.0 - confidence_level
     sem = np.zeros(n, dtype=np.float64)
-    sem[1:] = cum_std[1:] / np.sqrt(indices[1:])
-    margin_of_error = z_critical * sem
+    margin_of_error = np.zeros(n, dtype=np.float64)
+    if n > 1:
+        sem[1:] = cum_std[1:] / np.sqrt(indices[1:])
+        t_critical = stats.t.ppf(1.0 - alpha / 2.0, df=indices[1:] - 1.0)
+        margin_of_error[1:] = t_critical * sem[1:]
 
     return cum_mean, cum_std, margin_of_error
 
@@ -824,7 +827,7 @@ def compute_empirical_distribution_summary(
     scenario_id: int = 1,
     scenario_name: str = "",
 ) -> EmpiricalDistributionSummary:
-    """Compute empirical distribution metrics and risk percentiles for sample array.
+    """Compute descriptive statistics and percentiles for simulated annual downtime.
 
     Args:
         samples: 1D array of sample values (e.g. annual downtime hours).
@@ -832,11 +835,11 @@ def compute_empirical_distribution_summary(
         scenario_name: Human-readable scenario name.
 
     Returns:
-        EmpiricalDistributionSummary with mean, std, quantiles, and higher moments.
+        EmpiricalDistributionSummary with mean, std, sem, min, max, and percentiles.
     """
     n = len(samples)
     if n == 0:
-        raise ValueError("Cannot compute empirical distribution summary for empty samples.")
+        raise ValueError("Cannot compute distribution summary for empty samples.")
     mean_val = float(np.mean(samples))
     std_val = float(np.std(samples, ddof=1)) if n > 1 else 0.0
     sem_val = std_val / math.sqrt(n) if n > 0 else 0.0
@@ -846,8 +849,6 @@ def compute_empirical_distribution_summary(
     p99_val = float(np.percentile(samples, 99.0))
     min_val = float(np.min(samples))
     max_val = float(np.max(samples))
-    skew_val = float(stats.skew(samples)) if n > 2 else 0.0
-    kurt_val = float(stats.kurtosis(samples)) if n > 3 else 0.0
 
     return EmpiricalDistributionSummary(
         scenario_id=scenario_id,
@@ -862,6 +863,4 @@ def compute_empirical_distribution_summary(
         p99=p99_val,
         min_val=min_val,
         max_val=max_val,
-        skewness=skew_val,
-        kurtosis=kurt_val,
     )
