@@ -12,7 +12,6 @@ from typing import Dict, Optional, Tuple, Union
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import integrate
 
 from src.models.analytical import DEFAULT_BLOCKS, BlockParameters, HOURS_PER_YEAR
 
@@ -228,32 +227,6 @@ def calculate_mttf_redundant_closed_form(
     g4 = l1 + 2.0 * l2 + 2.0 * l3 + l4
 
     return 4.0 / g1 - 2.0 / g2 - 2.0 / g3 + 1.0 / g4
-
-
-def calculate_mttf_redundant_numerical(
-    blocks: Dict[str, BlockParameters] = DEFAULT_BLOCKS,
-) -> float:
-    """Calculate Scenario 2 MTTF using adaptive Gauss-Kronrod numerical quadrature.
-
-    Used to cross-validate the 4-term closed-form analytical expression
-    (calculate_mttf_redundant_closed_form). The theoretical absolute error tolerance
-    between the closed-form equation and this numerical quadrature is verified
-    to satisfy |Delta| < 10^-9 hours (with observed numerical error |Delta| ~ 2.31e-11 h).
-
-    Args:
-        blocks: Dictionary of BlockParameters.
-
-    Returns:
-        MTTF in hours computed numerically.
-    """
-    result, _ = integrate.quad(
-        lambda t: calculate_reliability_redundant(t, blocks),
-        0.0,
-        np.inf,
-        epsabs=1e-12,
-        epsrel=1e-10,
-    )
-    return float(result)
 
 
 def calculate_mttf_scenario_3_closed_form(

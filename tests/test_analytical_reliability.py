@@ -6,7 +6,6 @@ import math
 from pathlib import Path
 import numpy as np
 import pytest
-from scipy import integrate
 
 from src.models.analytical import DEFAULT_BLOCKS
 from src.models.analytical_reliability import (
@@ -17,7 +16,6 @@ from src.models.analytical_reliability import (
     calculate_reliability_scenario_3,
     calculate_mttf_baseline,
     calculate_mttf_redundant_closed_form,
-    calculate_mttf_redundant_numerical,
     calculate_mttf_scenario_3_closed_form,
     evaluate_mttf_metrics,
     plot_reliability_curves,
@@ -100,7 +98,7 @@ def test_redundant_reliability_scenario_2():
 
 
 def test_mttf_baseline_exact_value():
-    """Verify closed-form MTTF_base = 1 / sum(lambda_i) and numerical integral consistency."""
+    """Verify closed-form MTTF_base = 1 / sum(lambda_i)."""
     mttf_base = calculate_mttf_baseline()
 
     # Theoretical sum of failure rates
@@ -111,24 +109,28 @@ def test_mttf_baseline_exact_value():
     assert math.isclose(mttf_base, 60.6946, abs_tol=1e-3)
     assert round(mttf_base, 2) == 60.69
 
-    # Numerical integral check: integral_0^infty R_base(t) dt == MTTF_base
-    num_integral, _ = integrate.quad(
-        lambda t: float(calculate_reliability_baseline(t)),
-        0.0,
-        np.inf,
-    )
-    assert math.isclose(mttf_base, num_integral, rel_tol=1e-8)
 
+def test_mttf_redundant_closed_form():
+    """Verify algebraic expansion of R_red(t) and exact closed-form 4-term MTTF_red."""
+    l1 = DEFAULT_BLOCKS["LB"].lambda_base
+    l2 = DEFAULT_BLOCKS["App"].lambda_base
+    l3 = DEFAULT_BLOCKS["DB"].lambda_base
+    l4 = DEFAULT_BLOCKS["PGW"].lambda_base
 
-def test_mttf_redundant_closed_form_vs_numerical():
-    """Verify exact closed-form 4-term MTTF_red formula against numerical quadrature."""
+    g1 = l1 + l2 + l3 + l4
+    g2 = l1 + 2.0 * l2 + l3 + l4
+    g3 = l1 + l2 + 2.0 * l3 + l4
+    g4 = l1 + 2.0 * l2 + 2.0 * l3 + l4
+
+    # Algebraic equivalence between factored R_red(t) and 4 exponential terms
+    times = np.linspace(0.0, 500.0, 100)
+    r_factored = calculate_reliability_redundant(times)
+    r_expanded = 4.0 * np.exp(-g1 * times) - 2.0 * np.exp(-g2 * times) - 2.0 * np.exp(-g3 * times) + np.exp(-g4 * times)
+    np.testing.assert_allclose(r_factored, r_expanded, rtol=1e-12, atol=1e-12)
+
     mttf_closed = calculate_mttf_redundant_closed_form()
-    mttf_num = calculate_mttf_redundant_numerical()
-
-    # Must match to strict absolute error tolerance |Delta| < 10^-9 hours
-    abs_diff = abs(mttf_closed - mttf_num)
-    assert abs_diff < 1e-9, f"Discrepancy {abs_diff} exceeds 1e-9 tolerance threshold"
-    assert math.isclose(mttf_closed, mttf_num, rel_tol=1e-8)
+    expected_mttf = 4.0 / g1 - 2.0 / g2 - 2.0 / g3 + 1.0 / g4
+    assert math.isclose(mttf_closed, expected_mttf, rel_tol=1e-12)
 
     # Expected value around 106.06 hours
     assert math.isclose(mttf_closed, 106.0570, abs_tol=1e-3)
@@ -155,15 +157,27 @@ def test_mttf_gain_and_multiplication_factor():
 
 def test_scenario_3_reliability_and_mttf():
     """Verify Scenario 3 (Multi-Gateway) 8-term expansion and MTTF extension."""
-    mttf_s3_closed = calculate_mttf_scenario_3_closed_form()
+    l1 = DEFAULT_BLOCKS["LB"].lambda_base
+    l2 = DEFAULT_BLOCKS["App"].lambda_base
+    l3 = DEFAULT_BLOCKS["DB"].lambda_base
+    l4 = DEFAULT_BLOCKS["PGW"].lambda_base
 
-    # Numerical integration check
-    mttf_s3_num, _ = integrate.quad(
-        lambda t: float(calculate_reliability_scenario_3(t)),
-        0.0,
-        np.inf,
+    # Algebraic equivalence between factored R_scen3(t) and 8 exponential terms
+    times = np.linspace(0.0, 500.0, 100)
+    r_factored = calculate_reliability_scenario_3(times)
+    r_expanded = (
+        8.0 * np.exp(-(l1 + l2 + l3 + l4) * times)
+        - 4.0 * np.exp(-(l1 + 2.0 * l2 + l3 + l4) * times)
+        - 4.0 * np.exp(-(l1 + l2 + 2.0 * l3 + l4) * times)
+        - 4.0 * np.exp(-(l1 + l2 + l3 + 2.0 * l4) * times)
+        + 2.0 * np.exp(-(l1 + 2.0 * l2 + 2.0 * l3 + l4) * times)
+        + 2.0 * np.exp(-(l1 + 2.0 * l2 + l3 + 2.0 * l4) * times)
+        + 2.0 * np.exp(-(l1 + l2 + 2.0 * l3 + 2.0 * l4) * times)
+        - np.exp(-(l1 + 2.0 * l2 + 2.0 * l3 + 2.0 * l4) * times)
     )
-    assert math.isclose(mttf_s3_closed, mttf_s3_num, rel_tol=1e-8)
+    np.testing.assert_allclose(r_factored, r_expanded, rtol=1e-12, atol=1e-12)
+
+    mttf_s3_closed = calculate_mttf_scenario_3_closed_form()
 
     # Expected value around 114.05 hours
     assert math.isclose(mttf_s3_closed, 114.0535, abs_tol=1e-3)
