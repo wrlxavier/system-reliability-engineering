@@ -1,12 +1,13 @@
 """
-Subsystem Unavailability and Downtime Pareto Analysis.
+Subsystem Percentage Unavailability Contribution and Bottleneck Identification.
 
-This module quantifies individual subsystem contributions to system downtime,
-computes cumulative unavailability profiles, and evaluates architectural bottleneck
-shifts between baseline and redundant configurations for Milestone 3 / Issue #3 & #5.
+This module quantifies individual subsystem contributions to annual system downtime,
+computes relative and cumulative percentage shares across architectural tiers, and
+identifies primary bottlenecks across baseline and redundant configurations.
 """
 
 from dataclasses import dataclass
+import math
 from typing import Dict, List, Optional
 import pandas as pd
 
@@ -14,7 +15,6 @@ from src.models.analytical import (
     DEFAULT_BLOCKS,
     BlockParameters,
     HOURS_PER_YEAR,
-    MINUTES_PER_YEAR,
     evaluate_scenario_1,
     evaluate_scenario_2,
     evaluate_scenario_3,
@@ -23,7 +23,7 @@ from src.models.analytical import (
 
 @dataclass
 class SubsystemDowntimeContribution:
-    """Individual downtime contribution and Pareto metrics for a subsystem block.
+    """Individual downtime contribution metrics for a single subsystem block.
 
     Attributes:
         block_code: Short identifier (LB, App, DB, PGW).
@@ -33,9 +33,9 @@ class SubsystemDowntimeContribution:
         unavailability: Operating steady-state unavailability U_i = 1 - A_i.
         downtime_hours: Standalone expected annual downtime in hours (U_i * 8760).
         downtime_minutes: Standalone expected annual downtime in minutes.
-        percentage_of_total: Percentage share of total subsystem downtime (%).
+        percentage_of_total: Percentage share of the sum of subsystem downtimes (%).
         cumulative_percentage: Running cumulative percentage share (%).
-        allocated_downtime_hours: First-order allocated share of exact system downtime.
+        allocated_downtime_hours: Proportional share of exact system downtime.
         rank: Descending rank by downtime contribution (1 to n).
     """
     block_code: str
@@ -52,8 +52,8 @@ class SubsystemDowntimeContribution:
 
 
 @dataclass
-class ParetoAnalysisResult:
-    """Comprehensive Pareto analysis result for an architectural scenario.
+class SubsystemContributionResult:
+    """Subsystem unavailability contribution summary for an architectural scenario.
 
     Attributes:
         scenario_id: Scenario identifier (1, 2, or 3).
@@ -61,9 +61,9 @@ class ParetoAnalysisResult:
         system_availability: Exact analytical system availability A_sys.
         system_unavailability: Exact analytical system unavailability U_sys = 1 - A_sys.
         system_downtime_hours: Exact analytical system downtime in hours/year.
-        sum_component_downtime_hours: Sum of independent subsystem downtimes (hours/year).
+        sum_component_downtime_hours: Sum of individual subsystem downtimes (hours/year).
         contributions: List of SubsystemDowntimeContribution sorted descending by downtime.
-        dominant_bottlenecks: List of block codes causing >= 80% cumulative downtime.
+        primary_bottlenecks: List of block codes tied for the largest individual downtime.
         top_contributor_code: Short code of the largest single downtime contributor.
         top_contributor_share_pct: Percentage share of the largest contributor (%).
         app_db_combined_share_pct: Combined percentage share of App and DB tiers (%).
@@ -76,7 +76,7 @@ class ParetoAnalysisResult:
     system_downtime_hours: float
     sum_component_downtime_hours: float
     contributions: List[SubsystemDowntimeContribution]
-    dominant_bottlenecks: List[str]
+    primary_bottlenecks: List[str]
     top_contributor_code: str
     top_contributor_share_pct: float
     app_db_combined_share_pct: float
@@ -86,15 +86,15 @@ class ParetoAnalysisResult:
 def compute_subsystem_downtime_contributions(
     scenario_id: int,
     blocks: Dict[str, BlockParameters] = DEFAULT_BLOCKS,
-) -> ParetoAnalysisResult:
-    """Compute individual downtime contributions and Pareto ordering for a given scenario.
+) -> SubsystemContributionResult:
+    """Compute individual downtime contributions and bottleneck ordering for a scenario.
 
     Args:
         scenario_id: Architectural scenario (1 for Baseline Series, 2 for Multi-AZ, 3 for Multi-Gateway).
         blocks: Subsystem nominal parameters dictionary.
 
     Returns:
-        ParetoAnalysisResult with sorted contributions and summary metrics.
+        SubsystemContributionResult with sorted contributions and summary metrics.
     """
     if scenario_id == 1:
         metrics = evaluate_scenario_1(blocks)
@@ -126,7 +126,6 @@ def compute_subsystem_downtime_contributions(
     else:
         raise ValueError(f"Unsupported scenario_id: {scenario_id}. Must be 1, 2, or 3.")
 
-    # Calculate standalone downtime for each block
     raw_items = []
     pipeline_order = ["LB", "App", "DB", "PGW"]
     for code in pipeline_order:
@@ -154,17 +153,22 @@ def compute_subsystem_downtime_contributions(
         key=lambda x: (-x["d_hours"], x["pipeline_idx"]),
     )
 
+    max_downtime = max((item["d_hours"] for item in sorted_items), default=0.0)
+    primary_bottlenecks = [
+        item["code"]
+        for item in sorted_items
+        if math.isclose(item["d_hours"], max_downtime, rel_tol=1e-9)
+    ]
+
     contributions: List[SubsystemDowntimeContribution] = []
     running_cum_pct = 0.0
-    dominant_bottlenecks: List[str] = []
 
     for rank, item in enumerate(sorted_items, start=1):
         pct = (item["d_hours"] / sum_d_hours) * 100.0 if sum_d_hours > 0 else 0.0
         running_cum_pct += pct
-        # Clip at 100.0 to prevent minor float rounding overshoot
         cum_pct = min(running_cum_pct, 100.0)
 
-        # First-order proportional allocation of exact system downtime
+        # Proportional allocation of exact system downtime across blocks
         alloc_h = (item["d_hours"] / sum_d_hours) * metrics.annual_downtime_hours if sum_d_hours > 0 else 0.0
 
         contrib = SubsystemDowntimeContribution(
@@ -182,15 +186,11 @@ def compute_subsystem_downtime_contributions(
         )
         contributions.append(contrib)
 
-        if cum_pct <= 80.0 or len(dominant_bottlenecks) == 0:
-            dominant_bottlenecks.append(item["code"])
-
-    # Specific shares of interest
     shares_by_code = {c.block_code: c.percentage_of_total for c in contributions}
     app_db_combined = shares_by_code.get("App", 0.0) + shares_by_code.get("DB", 0.0)
     pgw_share = shares_by_code.get("PGW", 0.0)
 
-    return ParetoAnalysisResult(
+    return SubsystemContributionResult(
         scenario_id=scenario_id,
         scenario_name=scenario_name,
         system_availability=metrics.system_availability,
@@ -198,7 +198,7 @@ def compute_subsystem_downtime_contributions(
         system_downtime_hours=metrics.annual_downtime_hours,
         sum_component_downtime_hours=sum_d_hours,
         contributions=contributions,
-        dominant_bottlenecks=dominant_bottlenecks,
+        primary_bottlenecks=primary_bottlenecks,
         top_contributor_code=contributions[0].block_code,
         top_contributor_share_pct=contributions[0].percentage_of_total,
         app_db_combined_share_pct=app_db_combined,
@@ -206,13 +206,13 @@ def compute_subsystem_downtime_contributions(
     )
 
 
-def evaluate_pareto_analysis(
+def evaluate_subsystem_contributions(
     blocks: Dict[str, BlockParameters] = DEFAULT_BLOCKS,
-) -> Dict[str, ParetoAnalysisResult]:
-    """Evaluate Pareto analysis across all three architectural scenarios.
+) -> Dict[str, SubsystemContributionResult]:
+    """Evaluate subsystem downtime contributions across all three architectural scenarios.
 
     Returns:
-        Dictionary mapping 'scenario_1', 'scenario_2', 'scenario_3' to ParetoAnalysisResult.
+        Dictionary mapping 'scenario_1', 'scenario_2', 'scenario_3' to SubsystemContributionResult.
     """
     return {
         "scenario_1": compute_subsystem_downtime_contributions(1, blocks),
@@ -221,14 +221,14 @@ def evaluate_pareto_analysis(
     }
 
 
-def get_pareto_dataframe(result: ParetoAnalysisResult) -> pd.DataFrame:
-    """Format a ParetoAnalysisResult into a clean pandas DataFrame for display.
+def get_subsystem_contribution_dataframe(result: SubsystemContributionResult) -> pd.DataFrame:
+    """Format a SubsystemContributionResult into a pandas DataFrame for tabular display.
 
     Args:
-        result: ParetoAnalysisResult object.
+        result: SubsystemContributionResult object.
 
     Returns:
-        DataFrame containing formatted Pareto table.
+        DataFrame containing ranked subsystem downtime contributions.
     """
     rows = []
     for c in result.contributions:
@@ -245,25 +245,24 @@ def get_pareto_dataframe(result: ParetoAnalysisResult) -> pd.DataFrame:
             "Cumulative (%)": c.cumulative_percentage,
             "Allocated Downtime (h/yr)": c.allocated_downtime_hours,
         })
-    df = pd.DataFrame(rows)
-    return df
+    return pd.DataFrame(rows)
 
 
 def compute_bottleneck_shift_summary(
-    results: Optional[Dict[str, ParetoAnalysisResult]] = None,
+    results: Optional[Dict[str, SubsystemContributionResult]] = None,
     blocks: Dict[str, BlockParameters] = DEFAULT_BLOCKS,
 ) -> Dict[str, float]:
-    """Compute quantitative comparative metrics highlighting the architectural bottleneck shift.
+    """Compute comparative metrics highlighting the bottleneck shift across scenarios.
 
     Args:
-        results: Optional dictionary from evaluate_pareto_analysis. Evaluated if None.
+        results: Optional dictionary from evaluate_subsystem_contributions. Evaluated if None.
         blocks: Block parameters dictionary.
 
     Returns:
-        Dictionary of comparative shift metrics.
+        Dictionary of comparative bottleneck shift metrics.
     """
     if results is None:
-        results = evaluate_pareto_analysis(blocks)
+        results = evaluate_subsystem_contributions(blocks)
 
     s1 = results["scenario_1"]
     s2 = results["scenario_2"]

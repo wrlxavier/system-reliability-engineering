@@ -1,5 +1,5 @@
 """
-Models package for analytical and stochastic reliability engineering.
+Models package for analytical reliability and availability engineering.
 """
 
 from src.models.analytical import (
@@ -26,25 +26,17 @@ from src.models.analytical_reliability import (
     calculate_reliability_scenario_3,
     calculate_mttf_baseline,
     calculate_mttf_redundant_closed_form,
-    calculate_mttf_redundant_numerical,
     calculate_mttf_scenario_3_closed_form,
     evaluate_mttf_metrics,
     plot_reliability_curves,
 )
-from src.models.pareto import (
+from src.models.subsystem_contribution import (
     SubsystemDowntimeContribution,
-    ParetoAnalysisResult,
+    SubsystemContributionResult,
     compute_subsystem_downtime_contributions,
-    evaluate_pareto_analysis,
-    get_pareto_dataframe,
+    evaluate_subsystem_contributions,
+    get_subsystem_contribution_dataframe,
     compute_bottleneck_shift_summary,
-)
-from src.models.sensitivity import (
-    get_internal_redundant_availability,
-    evaluate_gateway_availability_sensitivity,
-    evaluate_failover_coverage_sensitivity,
-    evaluate_common_cause_failure_sensitivity,
-    compute_diminishing_returns_metrics,
 )
 
 __all__ = [
@@ -69,19 +61,13 @@ __all__ = [
     "calculate_reliability_scenario_3",
     "calculate_mttf_baseline",
     "calculate_mttf_redundant_closed_form",
-    "calculate_mttf_redundant_numerical",
     "calculate_mttf_scenario_3_closed_form",
     "evaluate_mttf_metrics",
     "plot_reliability_curves",
     "SubsystemDowntimeContribution",
-    "ParetoAnalysisResult",
+    "SubsystemContributionResult",
     "compute_subsystem_downtime_contributions",
-    "evaluate_pareto_analysis",
-    "get_pareto_dataframe",
+    "evaluate_subsystem_contributions",
+    "get_subsystem_contribution_dataframe",
     "compute_bottleneck_shift_summary",
-    "get_internal_redundant_availability",
-    "evaluate_gateway_availability_sensitivity",
-    "evaluate_failover_coverage_sensitivity",
-    "evaluate_common_cause_failure_sensitivity",
-    "compute_diminishing_returns_metrics",
 ]

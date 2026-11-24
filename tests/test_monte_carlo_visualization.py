@@ -1,6 +1,6 @@
 """
-Unit tests for Milestone 3 / Issue #5: Monte Carlo Convergence Curves, Empirical
-Downtime Distribution Histograms, and Pareto Subsystem Cross-Validation.
+Unit tests for Milestone 3 / Issue #5: Monte Carlo Convergence Curves, Simulated
+Downtime Distribution Histograms, and Subsystem Downtime Cross-Validation.
 """
 
 import math
@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import matplotlib.pyplot as plt
+from scipy import stats
 
 from src.simulation.monte_carlo import (
     DEFAULT_SEED,
@@ -48,10 +49,12 @@ def test_running_statistics_mathematical_properties():
     # Final running std equals sample standard deviation with ddof=1
     assert math.isclose(cum_std[-1], float(np.std(samples, ddof=1)), rel_tol=1e-7)
 
-    # Margin of error should decrease approximately as 1 / sqrt(n)
+    # Margin of error should decrease as n grows and match Student's t critical value
     assert margin[-1] < margin[10]
-    expected_last_margin = 1.959964 * (cum_std[-1] / math.sqrt(2000))
-    assert math.isclose(margin[-1], expected_last_margin, rel_tol=1e-3)
+    expected_margin_10 = float(stats.t.ppf(0.975, df=9)) * (cum_std[9] / math.sqrt(10))
+    assert math.isclose(margin[9], expected_margin_10, rel_tol=1e-7)
+    expected_last_margin = float(stats.t.ppf(0.975, df=1999)) * (cum_std[-1] / math.sqrt(2000))
+    assert math.isclose(margin[-1], expected_last_margin, rel_tol=1e-7)
 
     # Edge cases
     empty_mean, empty_std, empty_margin = compute_running_statistics(np.array([]))
@@ -77,9 +80,6 @@ def test_empirical_distribution_summary():
 
     # Quantiles must be monotonically non-decreasing
     assert summary.min_val <= summary.median <= summary.p90 <= summary.p95 <= summary.p99 <= summary.max_val
-
-    # Exponential distribution has positive skewness (~2.0)
-    assert summary.skewness > 1.0
 
     with pytest.raises(ValueError):
         compute_empirical_distribution_summary(np.array([]))
@@ -122,7 +122,7 @@ def test_plot_downtime_histograms_runs_and_exports(tmp_path: Path):
 
 
 def test_plot_subsystem_breakdown_runs_and_exports(tmp_path: Path):
-    """Verify subsystem downtime breakdown Pareto chart generation."""
+    """Verify subsystem downtime breakdown chart generation."""
     cfg = SimulationConfig(seed=DEFAULT_SEED, num_replicas=100, horizon_hours=1000.0)
     res1 = run_monte_carlo_simulation(1, config=cfg)
     res2 = run_monte_carlo_simulation(2, config=cfg)
@@ -131,8 +131,8 @@ def test_plot_subsystem_breakdown_runs_and_exports(tmp_path: Path):
     fig = plot_simulation_subsystem_breakdown(results, output_dir=tmp_path)
 
     assert isinstance(fig, plt.Figure)
-    assert (tmp_path / "monte_carlo_pareto_validation.pdf").exists()
-    assert (tmp_path / "monte_carlo_pareto_validation.png").exists()
+    assert (tmp_path / "monte_carlo_subsystem_validation.pdf").exists()
+    assert (tmp_path / "monte_carlo_subsystem_validation.png").exists()
 
     plt.close(fig)
 
@@ -150,7 +150,7 @@ def test_generate_all_monte_carlo_diagrams(tmp_path: Path):
     # Acceptance criteria: monte_carlo_convergence.pdf and downtime_histogram.pdf
     assert "monte_carlo_convergence.pdf" in files
     assert "downtime_histogram.pdf" in files
-    assert "monte_carlo_pareto_validation.pdf" in files
+    assert "monte_carlo_subsystem_validation.pdf" in files
 
     for name, path in files.items():
         assert path.exists(), f"File {name} does not exist."

@@ -8,7 +8,7 @@ In an unredundant distributed deployment, these components operate in a logical 
 
 ## Architectural Topologies and Structural Diagrams
 
-The target platform consists of four functional subsystems, comprising a load balancer, an application compute engine, a transactional relational database, and an external payment gateway. Two structural configurations are investigated to analyze the benefits of fault tolerance mechanisms.
+The target platform consists of four functional subsystems, comprising a load balancer, an application compute engine, a transactional relational database, and an external payment gateway. Three structural configurations are investigated to analyze the benefits of fault tolerance mechanisms: the Baseline pure-series configuration, the Multi-AZ series-parallel configuration, and the Multi-Gateway expansion.
 
 ### Baseline Topology
 
@@ -69,11 +69,11 @@ $$A_{\text{base}} = \prod_{i=1}^{4} A_i$$
 
 Preliminary evaluations parameterized with standard commercial cloud contracts show that the baseline availability reaches approximately $98.943\%$, which corresponds to more than $92$ hours of accumulated downtime every year. The single instance application and database servers account for more than $94\%$ of all outages. 
 
-Implementing multi zone parallel redundancy elevates the steady state availability to $99.880\%$, diminishing annual downtime to around $10.51$ hours. This represents an $88.6\%$ reduction in operational disruption, subsequently shifting the primary availability bottleneck toward the external third party payment gateway.
+Implementing multi zone parallel redundancy elevates the steady state availability to $99.880\%$, diminishing annual downtime to around $10.51$ hours. This represents an $88.6\%$ reduction in operational disruption, subsequently shifting the primary availability bottleneck toward the external third party payment gateway. Adding dual active-active external payment gateways (Scenario 3) elevates availability further to $99.930\%$ ($6.13\text{ hours/year}$ downtime), isolating database failover as the dominant remaining bottleneck.
 
 ## Scope of the Repository
 
-This repository hosts the computational implementation of the analytical equations alongside discrete event numerical simulations based on the Monte Carlo method. Repository assets are organized to enable reproducible execution of availability derivations, statistical convergence validation across $10^4$ simulated annual cycles, and visual generation of reliability curves and Pareto charts. Developers working on the codebase can trace mathematical principles directly to modular Python implementations and interactive Jupyter notebooks.
+This repository hosts the computational implementation of the analytical equations alongside Monte Carlo simulations. Repository assets are organized to enable reproducible execution of availability derivations, statistical validation across $10^4$ simulated annual cycles, and visual generation of reliability curves and subsystem unavailability contribution charts. Developers working on the codebase can trace mathematical principles directly to modular Python implementations and interactive Jupyter notebooks.
 
 ## References
 

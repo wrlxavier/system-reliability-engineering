@@ -24,7 +24,7 @@ from src.simulation.monte_carlo import (
     SimulationMetrics,
     ScenarioSimulationResult,
     sample_exponential_variable,
-    simulate_component_renewal,
+    simulate_component_cycles,
     merge_outage_intervals,
     intersect_two_interval_lists,
     intersect_multiple_interval_lists,

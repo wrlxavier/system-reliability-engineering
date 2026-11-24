@@ -95,15 +95,32 @@ def test_scenario_2_analytical_metrics():
 def test_scenario_3_analytical_metrics():
     """Verify Scenario 3 (Multi-Gateway Expansion) metrics.
 
+    A_4,red = 1 - (1 - 0.9995)^2 = 0.99999975 (99.999975%)
     A_scen3 = 0.9999 * 0.9999 * 0.9995 * 0.99999975 = 99.930%
     Downtime = 6.13 h/year
     """
+    s1 = evaluate_scenario_1()
+    s2 = evaluate_scenario_2()
     s3 = evaluate_scenario_3()
+
+    a_pgw_red = s3.block_availabilities["PGW"]
+    assert math.isclose(a_pgw_red, 0.99999975, abs_tol=1e-8)
+    assert f"{a_pgw_red * 100:.6f}" == "99.999975"
+    d_pgw_red = (1.0 - a_pgw_red) * HOURS_PER_YEAR
+    assert math.isclose(d_pgw_red, 0.00219, abs_tol=1e-4)
+
+    expected_a3 = 0.9999 * 0.9999 * 0.9995 * 0.99999975
+    assert math.isclose(s3.system_availability, expected_a3, abs_tol=1e-8)
     assert math.isclose(s3.system_availability, 0.999300, abs_tol=1e-5)
     assert round(s3.system_availability * 100, 3) == 99.930
     assert math.isclose(s3.annual_downtime_hours, 6.133, abs_tol=1e-2)
     assert round(s3.annual_downtime_hours, 2) == 6.13
     assert math.isclose(s3.relative_reduction_vs_baseline_pct, 93.38, abs_tol=0.1)
+
+    saved_vs_s1 = s1.annual_downtime_hours - s3.annual_downtime_hours
+    saved_vs_s2 = s2.annual_downtime_hours - s3.annual_downtime_hours
+    assert math.isclose(saved_vs_s1, 86.45, abs_tol=0.05)
+    assert math.isclose(saved_vs_s2, 4.37, abs_tol=0.05)
 
 
 def test_all_scenarios_summary():
